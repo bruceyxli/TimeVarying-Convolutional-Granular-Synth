@@ -2,8 +2,6 @@
 
 A Python-based granular synthesizer that fuses **granular synthesis** with **time-varying convolution** using very short impulse responses (IRs). Timbre evolves at the grain rate without smearing attacks, enabling everything from evolving pads to percussive micro-rooms.
 
-Built for **Music 159** at UC Berkeley.
-
 ## How It Works
 
 ```
