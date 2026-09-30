@@ -327,12 +327,17 @@ function moveXY(event) {
 }
 $("orbit-pad").addEventListener("pointerdown", (event) => {
   if (!event.isPrimary || event.button !== 0) return;
-  pointer = event.pointerId; $("orbit-pad").setPointerCapture(pointer); moveXY(event);
+  pointer = event.pointerId; $("orbit-pad").setPointerCapture(pointer);
+  $("orbit-pad").classList.add("is-dragging"); moveXY(event);
 });
-$("orbit-pad").addEventListener("pointermove", (event) => { if (event.pointerId === pointer) moveXY(event); });
-$("orbit-pad").addEventListener("pointerup", () => { pointer = null; });
-$("orbit-pad").addEventListener("pointercancel", () => { pointer = null; });
-$("orbit-pad").addEventListener("lostpointercapture", () => { pointer = null; });
+$("orbit-pad").addEventListener("pointermove", (event) => {
+  if (event.pointerId === pointer) moveXY(event);
+  const bounds = $("xy-handle").getBoundingClientRect();
+  $("orbit-pad").classList.toggle("handle-hover", Math.hypot(event.clientX - bounds.left - bounds.width / 2, event.clientY - bounds.top - bounds.height / 2) < 22);
+});
+const releaseXY = () => { pointer = null; $("orbit-pad").classList.remove("is-dragging", "handle-hover"); };
+["pointerup", "pointercancel", "lostpointercapture"].forEach((name) => $("orbit-pad").addEventListener(name, releaseXY));
+$("orbit-pad").addEventListener("pointerleave", () => $("orbit-pad").classList.remove("handle-hover"));
 new ResizeObserver(() => {
   scheduleDraw(); drawWave($("source-wave"), state.sourceWave);
   drawWave($("output-wave"), state.result?.waveform || [], $("audio").currentTime / (state.result?.duration || 1));

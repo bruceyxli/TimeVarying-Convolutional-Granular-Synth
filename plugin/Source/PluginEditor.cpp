@@ -119,7 +119,14 @@ void OrbitPad::mouseDown(const juce::MouseEvent& event) {
     state.getParameter("density")->beginChangeGesture(); state.getParameter("pitch")->beginChangeGesture(); move(event.position);
 }
 void OrbitPad::mouseDrag(const juce::MouseEvent& event) { if(dragging) move(event.position); }
-void OrbitPad::mouseUp(const juce::MouseEvent&) { finish(); }
+void OrbitPad::mouseUp(const juce::MouseEvent& event) { finish();mouseMove(event); }
+void OrbitPad::mouseMove(const juce::MouseEvent& event) {
+    const auto target=targets();
+    const juce::Point<float> handle(static_cast<float>(getWidth())*(.2f+target[0]*.6f),static_cast<float>(getHeight())*(.8f-target[2]*.6f));
+    handleHovered=event.position.getDistanceFrom(handle)<22;
+    setMouseCursor(handleHovered?juce::MouseCursor::PointingHandCursor:juce::MouseCursor::CrosshairCursor);
+}
+void OrbitPad::mouseExit(const juce::MouseEvent&) { handleHovered=false; }
 void OrbitPad::move(juce::Point<float> p) {
     state.getParameter("density")->setValueNotifyingHost(juce::jlimit(0.0f,1.0f,(p.x/static_cast<float>(getWidth())-.2f)/.6f));
     state.getParameter("pitch")->setValueNotifyingHost(juce::jlimit(0.0f,1.0f,(.8f-p.y/static_cast<float>(getHeight()))/.6f));
@@ -132,6 +139,12 @@ std::array<float,5> OrbitPad::targets() const {
 }
 void OrbitPad::updateVisuals() {
     const auto target=targets();bool changed=false;
+    const float activity=dragging?1.0f:(handleHovered?.55f:0.0f);
+    if(handleActivity!=activity) {
+        handleActivity+=(activity-handleActivity)*.38f;
+        if(std::abs(activity-handleActivity)<.001f)handleActivity=activity;
+        changed=true;
+    }
     for(size_t i=0;i<visual.size();++i) if(visual[i]!=target[i]) {
         visual[i]+=(target[i]-visual[i])*.38f;
         if(std::abs(visual[i]-target[i])<.001f)visual[i]=target[i];
@@ -179,9 +192,24 @@ void OrbitPad::paint(juce::Graphics& g) {
     }
     g.setColour(muted.withAlpha(.4f)); g.drawLine(cx-3,cy,cx+3,cy,.7f); g.drawLine(cx,cy-3,cx,cy+3,.7f);
     const auto target=targets();const float hx=w*(.2f+target[0]*.6f),hy=h*(.8f-target[2]*.6f);
-    g.setColour(colour.withAlpha(.1f)); g.fillEllipse(hx-11,hy-11,22,22);
-    g.setColour(colour); g.fillEllipse(hx-4,hy-4,8,8);
-    g.setColour(text); g.drawEllipse(hx-5,hy-5,10,10,1.4f);
+    const float activity=handleActivity,radius=21+activity*7;
+    juce::ColourGradient bloom(colour.withAlpha(.38f+activity*.13f),hx,hy,colour.withAlpha(0.0f),hx+radius,hy,true);
+    bloom.addColour(.20,colour.withAlpha(.22f+activity*.12f));
+    bloom.addColour(.48,colour.withAlpha(.07f+activity*.05f));
+    bloom.addColour(.76,colour.withAlpha(.016f));
+    g.setGradientFill(bloom);g.fillEllipse(hx-radius,hy-radius,radius*2,radius*2);
+    // Fine interrupted locator ring, separated from the luminous core.
+    const float locator=9.5f+activity*2;
+    for(int quadrant=0;quadrant<4;++quadrant) {
+        const float start=static_cast<float>(quadrant)*orbit::pi*.5f+.22f;
+        juce::Path arc;arc.addCentredArc(hx,hy,locator,locator,0,start,start+.94f,true);
+        g.setColour(colour.withAlpha(.28f+activity*.25f));g.strokePath(arc,juce::PathStrokeType(.7f));
+    }
+    const float core=4.0f+activity*.5f;
+    g.setGradientFill(juce::ColourGradient(juce::Colours::white,hx-2,hy-3,colour.withMultipliedBrightness(.8f),hx+3,hy+4,false));
+    g.fillEllipse(hx-core,hy-core,core*2,core*2);
+    g.setColour(juce::Colours::white.withAlpha(.8f));g.drawEllipse(hx-core,hy-core,core*2,core*2,.65f);
+    g.setColour(juce::Colours::white.withAlpha(.95f));g.fillEllipse(hx-2,hy-2.5f,2.4f,2.4f);
 }
 
 OrbitEditor::OrbitEditor(OrbitProcessor& p):AudioProcessorEditor(p),processor(p),scope(p.engine.scope,look),pad(p.state) {

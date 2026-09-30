@@ -34,10 +34,14 @@ public:
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
+    void mouseMove(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
     void updateVisuals();
 private:
     juce::AudioProcessorValueTreeState& state;
     bool dragging=false;
+    bool handleHovered=false;
+    float handleActivity=0;
     std::array<float,5> visual{};
     std::array<float,5> targets() const;
     void move(juce::Point<float>);
