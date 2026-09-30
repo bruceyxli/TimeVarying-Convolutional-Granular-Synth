@@ -152,6 +152,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond({"error": str(exc)}, status=404)
         files = {"/": ("index.html", "text/html; charset=utf-8"),
                  "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+                 "/preset-store.js": ("preset-store.js", "text/javascript; charset=utf-8"),
                  "/style.css": ("style.css", "text/css; charset=utf-8"),
                  "/fonts/oxanium.ttf": ("fonts/oxanium.ttf", "font/ttf")}
         if path not in files:

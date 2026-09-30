@@ -15,6 +15,13 @@ artifacts. DAW-specific session testing remains a release requirement.
 The lightweight offline web interface can be started with
 `python -m src.app.web --port 56628`. Open the printed local address.
 
+Both interfaces provide **Save** beside the preset selector: name the current sound,
+then recall it from **User**. Presets include all parameters, including Reverb and
+advanced settings; repeated names create numbered copies. The native plugin stores
+files in `%APPDATA%\ORBIT\Presets` on Windows. The web version stores its own library
+in this browser for the current site address; clearing site data removes it.
+These are parameter presets, without source audio, and the two libraries are separate.
+
 ## How It Works
 
 ```

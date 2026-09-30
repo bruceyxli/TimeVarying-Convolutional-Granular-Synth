@@ -1,5 +1,26 @@
 # ORBIT native validation — 2026-09-30
 
+## 0.4.0 — user presets
+
+- Native source commit: `d3c8458a6a197a2106fb2eae2dc09e7484134126`.
+- Successful Windows build: https://github.com/bruceyxli/TimeVarying-Convolutional-Granular-Synth/actions/runs/36787966208
+- VST3 SHA-256: `1BCD7A62033845085C16BBDCA5039B09E85F5CE2A933E9C731054FC874AEC06B`.
+- Save/name/recall controls added without changing DSP or parameter IDs. Native
+  presets contain all 13 parameters; factory recall now also resets Reverb,
+  lookback, output, seed and bypass to the factory defaults.
+- Native tests passed in CI and locally: Unicode names, numbered duplicate copies,
+  reload through a new store, all-parameter recall, malformed-file rejection and
+  atomic rejection of invalid parameters. File access remains on the UI thread.
+- Existing DSP tests passed in CI; pluginval 1.0.4 strictness 5 passed in CI and
+  locally on the actual VST3. Native editor rendering/reopen passed locally.
+- Five Node preset-store tests and 23 Python tests passed locally. In-browser
+  testing saved a Chinese-named preset, changed parameters, reloaded the page and
+  restored Density 71, Grain 25 ms, Pitch 6.7 st, Wet 50% and Reverb 100%.
+  Modified preset labels and the naming dialog were also checked.
+- The web library stores 15 offline controls in localStorage; it is separate from
+  the native per-user file library. Presets contain settings, not source audio.
+- Real DAW session/soak testing is still pending.
+
 ## 0.3.1 — luminous XY cursor
 
 UI-only update: graduated optical bloom, a highlighted core, segmented locator ring,

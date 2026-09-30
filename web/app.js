@@ -2,6 +2,9 @@
 const $ = (id) => document.getElementById(id);
 const controls = ["density", "grain", "pitch", "wet", "reverb", "jitter", "pan", "seed", "variant", "strategy", "ir-ms", "bank-size", "long-ir", "duration", "sample-rate"];
 const state = { presets: {}, names: [], sourceId: null, sourceWave: [], demo: null, result: null, revision: 0, busy: false, uploading: false, online: false };
+state.userPresets = []; state.loadedValues = null;
+const presetLibrary = new OrbitPresets.Store({ getItem: key => localStorage.getItem(key), setItem: (key, text) => localStorage.setItem(key, text) });
+const presetSnapshot = () => Object.fromEntries(controls.map(id => [id, ["variant", "strategy"].includes(id) ? $(id).value : Number($(id).value)]));
 const value = (id) => Number($(id).value);
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 const percent = (x) => Math.round(x * 100);
@@ -148,18 +151,63 @@ function updateUI(changed = true) {
     if (state.result && !state.busy) message("Modified · render to update");
   }
   scheduleDraw();
+  updatePresetLabel();
 }
 
 function applyPreset() {
+  const user = state.userPresets.find(p => `user:${p.id}` === $("preset").value);
+  if (user) {
+    Object.entries(user.values).forEach(([id, v]) => { $(id).value = v; });
+    state.loadedValues = presetSnapshot();$("preset").title = user.name;updateUI();return;
+  }
   const p = state.presets[$("preset").value];
   if (!p) return;
   const values = { density: p.density_hz, grain: p.grain_ms, jitter: p.jitter, pitch: p.pitch_semitones,
     pan: p.pan_spread, "ir-ms": p.ir_ms, strategy: p.ir_strategy, wet: p.wet,
-    "bank-size": 64, "long-ir": 120, seed: 2025, variant: "standard" };
+    "bank-size": 64, "long-ir": 120, seed: 2025, variant: "standard", reverb: 0, duration: 10, "sample-rate": 48000 };
   Object.entries(values).forEach(([id, v]) => { $(id).value = v; });
   $("preset").title = p.description;
+  state.loadedValues = presetSnapshot();
   updateUI();
 }
+
+function updatePresetLabel() {
+  const selected = $("preset").selectedOptions[0];
+  if (!selected || !state.loadedValues) return;
+  const current = presetSnapshot();
+  const modified = controls.some(id => current[id] !== state.loadedValues[id]);
+  const name = selected.dataset.name || selected.value;
+  selected.textContent = name + (modified ? " *" : "");
+}
+function refreshPresetOptions(selected = $("preset").value) {
+  const factory = document.createElement("optgroup");factory.label = "Factory";
+  Object.keys(state.presets).forEach(name => { const option = new Option(name, name);option.dataset.name = name;factory.append(option); });
+  const user = document.createElement("optgroup");user.label = "User";
+  state.userPresets.forEach(p => { const option = new Option(p.name, `user:${p.id}`);option.dataset.name = p.name;user.append(option); });
+  $("preset").replaceChildren(factory, ...(state.userPresets.length ? [user] : []));
+  state.names = [...Object.keys(state.presets), ...state.userPresets.map(p => `user:${p.id}`)];
+  $("preset").value = state.names.includes(selected) ? selected : state.names[0];
+  updatePresetLabel();
+}
+$("save-preset").addEventListener("click", () => {
+  $("preset-save-error").textContent = "";
+  $("preset-name").value = state.userPresets.find(p => `user:${p.id}` === $("preset").value)?.name || "My preset";
+  $("save-preset-dialog").showModal();$("preset-name").focus();$("preset-name").select();
+});
+$("cancel-preset-save").addEventListener("click", () => $("save-preset-dialog").close());
+$("save-preset-form").addEventListener("submit", event => {
+  event.preventDefault();
+  try {
+    const saved = presetLibrary.save($("preset-name").value, presetSnapshot());
+    state.userPresets = presetLibrary.list();state.loadedValues = presetSnapshot();
+    refreshPresetOptions(`user:${saved.id}`);$("preset").title=saved.name;$("save-preset-dialog").close();message("Preset saved");
+  } catch (error) { $("preset-save-error").textContent = error.message; }
+});
+window.addEventListener("storage", event => {
+  if (event.key !== OrbitPresets.key && event.key !== null) return;
+  try { state.userPresets = presetLibrary.list();refreshPresetOptions(); }
+  catch (error) { message(error.message, true); }
+});
 
 function cyclePreset(direction) {
   if (!state.names.length) return;
@@ -347,8 +395,9 @@ async function start() {
   updateUI(false);
   try {
     const data = await api("/api/bootstrap");
-    state.presets = data.presets; state.names = Object.keys(data.presets); state.demo = data.source;
-    $("preset").replaceChildren(...state.names.map((name) => new Option(name, name)));
+    state.presets = data.presets; state.demo = data.source;
+    try { state.userPresets = presetLibrary.list(); } catch (error) { message(error.message, true); }
+    refreshPresetOptions();
     $("preset").value = "Airy shimmer";
     setSource(data.source.name, data.source, true); applyPreset();
     state.online = true;

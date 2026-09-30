@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ORBIT — Granular instrument</title>
   <link rel="stylesheet" href="/style.css">
+  <script src="/preset-store.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -15,6 +16,7 @@
         <button class="icon-button" id="previous-preset" aria-label="Previous preset">←</button>
         <select id="preset" aria-label="Sound preset"><option>Airy shimmer</option></select>
         <button class="icon-button" id="next-preset" aria-label="Next preset">→</button>
+        <button class="preset-save-button" id="save-preset" aria-label="Save preset">Save</button>
       </nav>
       <div class="header-actions">
         <button class="icon-button" id="reset" aria-label="Reset preset" title="Reset preset">↺</button>
@@ -102,5 +104,14 @@
     </section>
     <div class="feedback"><p id="message" role="status" aria-live="polite"></p></div>
   </main>
+  <dialog id="save-preset-dialog" aria-labelledby="save-preset-title">
+    <form id="save-preset-form">
+      <h2 id="save-preset-title">Save preset</h2>
+      <label class="sr-only" for="preset-name">Preset name</label>
+      <input id="preset-name" type="text" maxlength="64" required autocomplete="off" placeholder="Preset name">
+      <p id="preset-save-error" role="alert"></p>
+      <div class="preset-dialog-actions"><button type="button" id="cancel-preset-save">Cancel</button><button type="submit">Save</button></div>
+    </form>
+  </dialog>
 </body>
 </html>
