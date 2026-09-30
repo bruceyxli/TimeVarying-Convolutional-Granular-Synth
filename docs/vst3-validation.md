@@ -1,5 +1,23 @@
 # ORBIT native validation — 2026-09-30
 
+## 0.4.1 — parameter help and Details page
+
+- Native source commit: `3684876abfd7abe26ace980eb739e7fc72a7f2da`.
+- Windows build: https://github.com/bruceyxli/TimeVarying-Convolutional-Granular-Synth/actions/runs/36789562554
+- VST3 SHA-256: `759C816E8DA5E2BB20D6EFFEAAAC0ED9F020A743F972F43096C3D5F7E891B39A`.
+- Build, native DSP/host checks and pluginval 1.0.4 strictness 5 passed in CI.
+  Host checks also passed locally; the rendered native Details page was inspected.
+- Short Chinese tooltip descriptions cover parameters, labels, readouts and XY.
+  Native tooltips use a 550 ms delay and the existing cold-colour theme.
+- Details now replaces the main control area. Back restores the main page;
+  the native host window retains its size. Header preset controls remain available.
+- Browser checks confirmed the main controls disappear from the Details page,
+  edited Jitter survives a round trip, and Density, Grain, Pitch, Wet and Reverb
+  retain their values. Help text, keyboard focus and Escape dismissal were checked.
+- Native host checks cover page navigation, unchanged window bounds and complete
+  parameter preservation, and also render the Details page for visual inspection.
+- DSP and parameter IDs are unchanged. Real DAW session/soak testing remains pending.
+
 ## 0.4.0 — user presets
 
 - Native source commit: `d3c8458a6a197a2106fb2eae2dc09e7484134126`.
