@@ -294,7 +294,7 @@ controls.forEach((id) => $(id).addEventListener("input", () => updateUI()));
     input.value = clamp(Math.round((v - lo) / step) * step + lo, lo, hi).toFixed(3);
     updateUI();
   };
-  input.title = "Shift-drag for precision · Double-click to reset";
+  // Parameter help is installed below for sliders, labels and readouts.
   input.addEventListener("pointerdown", (event) => {
     if (event.button !== 0 || !event.isPrimary) return;
     event.preventDefault(); input.focus(); input.setPointerCapture(event.pointerId);
@@ -327,9 +327,17 @@ $("next-preset").addEventListener("click", () => cyclePreset(1));
 $("reset").addEventListener("click", applyPreset);
 $("detail-toggle").addEventListener("click", () => {
   const open = $("detail-panel").hidden;
+  const instrument = document.querySelector(".instrument"), workspace = document.querySelector(".workspace");
+  if (open) instrument.style.setProperty("--details-height", `${workspace.offsetHeight + document.querySelector(".detail-section").offsetHeight}px`);
+  workspace.hidden = open;
+  instrument.classList.toggle("details-open", open);
   $("detail-panel").hidden = !open;
-  $("detail-toggle").setAttribute("aria-expanded", String(open));
-  $("detail-sign").textContent = open ? "−" : "+";
+  $("details-title").hidden = !open;
+  $("detail-toggle").setAttribute("aria-label", open ? "Back to instrument" : "Open Details");
+  $("detail-toggle").innerHTML = open ? '<span aria-hidden="true">←</span> Back' : 'Details <span aria-hidden="true">→</span>';
+  window.scrollTo({top:0,behavior:"instant"});
+  if (open) $("details-title").focus({preventScroll:true});
+  else { $("detail-toggle").focus({preventScroll:true}); scheduleDraw();drawWave($("source-wave"), state.sourceWave); }
 });
 $("upload-button").addEventListener("click", () => $("source-file").click());
 $("source-file").addEventListener("change", () => upload($("source-file").files[0]));
@@ -411,3 +419,79 @@ async function start() {
   }
 }
 start();
+
+// One lightweight tooltip; descriptions are also available to screen readers.
+function installParameterHelp() {
+  const descriptions = {
+    "density": "Density · 颗粒密度\n每秒触发的颗粒数。越高越密集，越低越稀疏。",
+    "grain": "Grain size · 颗粒时长\n每个颗粒持续的时间。较短更细碎，较长保留更多原声细节。",
+    "pitch": "Pitch scatter · 音高散布\n每个颗粒随机升降音高的范围，以半音计。0 保持原音高。",
+    "wet": "Dry / Wet · 干湿比\n混合原始输入与颗粒效果。0% 为原声，100% 为颗粒声；Reverb 在混合后加入。",
+    "reverb": "Reverb · 混响\n增加空间感与尾音。0 关闭混响，光环为白色；增大后光环变蓝、光晕增强。",
+    "jitter": "Jitter · 触发抖动\n随机偏移颗粒触发时间。0 更规律，增大后节奏更松散。",
+    "pan": "Spread · 立体声散布\n颗粒在左右声道间随机分布的宽度。0 居中，增大后更宽。",
+    "seed": "Seed · 随机种子\n改变随机变化的序列。相同输入、种子与起始状态可复现相同变化。",
+    "variant": "Signal path · 信号路径\n选择逐颗粒卷积、先卷积再颗粒化，或用颗粒作为脉冲响应。",
+    "strategy": "Selection · IR 选择\n选择每个颗粒的响应：固定、轮换、随机、加权，或按频谱重心匹配。",
+    "ir-ms": "IR · 脉冲响应长度\n控制每颗粒卷积的短响应时长。较短更紧凑，较长带来更多共鸣。",
+    "bank-size": "Bank size · IR 数量\n生成的短脉冲响应数量。越多，可选音色越丰富，也会增加准备时间。",
+    "long-ir": "Long IR · 长响应\n先卷积模式下的脉冲响应时长。越长，空间尾音越明显。",
+    "duration": "Duration · 渲染时长\n生成音频的总长度，单位为秒。",
+    "sample-rate": "Sample rate · 采样率\n选择输出音频的采样率。更高采样率会增加运算量与文件体积。",
+    "orbit-pad": "XY · 声音控制\n左右改变颗粒密度，上下改变音高散布。也可使用两侧推子调整。"
+  };
+
+  const tooltip = document.createElement("div");
+  tooltip.className = "parameter-tooltip"; tooltip.hidden = true;
+  tooltip.setAttribute("aria-hidden", "true"); document.body.append(tooltip);
+  let active = null, timer = 0, pointerHeld = false;
+  function hide() { clearTimeout(timer); tooltip.hidden = true; active = null; }
+  function show(target, delay = 550) {
+    if (!target || pointerHeld || target === active) return;
+    hide(); active = target;
+    timer = setTimeout(() => {
+      if (!target.isConnected || !target.getClientRects().length) return hide();
+      const [heading, ...body] = descriptions[target.dataset.help].split("\n");
+      const title = document.createElement("strong"); title.textContent = heading;
+      const text = document.createElement("span"); text.textContent = body.join(" ");
+      tooltip.replaceChildren(title, text); tooltip.hidden = false;
+      const bounds = target.getBoundingClientRect(), gap = 10;
+      const left = Math.max(gap, Math.min(bounds.left + bounds.width / 2 - tooltip.offsetWidth / 2, innerWidth - tooltip.offsetWidth - gap));
+      let top = bounds.bottom + gap;
+      if (top + tooltip.offsetHeight > innerHeight - gap) top = bounds.top - tooltip.offsetHeight - gap;
+      tooltip.style.left = left + "px"; tooltip.style.top = Math.max(gap, top) + "px";
+    }, delay);
+  }
+  Object.entries(descriptions).forEach(([id, description]) => {
+    const input = $(id), accessible = document.createElement("span");
+    accessible.id = "help-" + id; accessible.className = "sr-only"; accessible.textContent = description;
+    document.body.append(accessible); input.setAttribute("aria-describedby", accessible.id);
+    input.removeAttribute("title");
+    const targets = [input, ...document.querySelectorAll('label[for="' + id + '"]')];
+    const parameter = input.closest(".parameter");
+    if (parameter) targets.push(parameter);
+    if (id === "wet") targets.push(document.querySelector(".mix-section"));
+    if (id === "reverb") targets.push(input.closest(".reverb-control"));
+    targets.filter(Boolean).forEach(target => { target.dataset.help = id; });
+  });
+  const targetOf = element => element instanceof Element ? element.closest("[data-help]") : null;
+  document.addEventListener("pointerover", event => {
+    if (event.pointerType === "touch") return;
+    const target = targetOf(event.target);
+    if (target !== targetOf(event.relatedTarget)) show(target);
+  });
+  document.addEventListener("pointerout", event => {
+    const next = targetOf(event.relatedTarget);
+    if (targetOf(event.target) !== next) { hide(); if (next) show(next); }
+  });
+  document.addEventListener("focusin", event => show(targetOf(event.target), 350));
+  document.addEventListener("focusout", hide);
+  document.addEventListener("pointerdown", () => { pointerHeld = true; hide(); }, true);
+  document.addEventListener("pointerup", () => { pointerHeld = false; }, true);
+  document.addEventListener("pointercancel", () => { pointerHeld = false; hide(); }, true);
+  document.addEventListener("keydown", event => { if (event.key === "Escape") hide(); });
+  window.addEventListener("blur", () => { pointerHeld = false; hide(); });
+  window.addEventListener("resize", hide);
+  document.addEventListener("scroll", hide, true);
+}
+installParameterHelp();
