@@ -1,5 +1,18 @@
 # ORBIT native validation — 2026-09-30
 
+## 0.4.2 — shared header navigation
+
+- Native source commit: `0d1e6665bca4ddbe59bb8809e53b836a1e7f3a18`.
+- Windows build: https://github.com/bruceyxli/TimeVarying-Convolutional-Granular-Synth/actions/runs/36790596728
+- Build, DSP/host checks and pluginval 1.0.4 strictness 5 passed in CI.
+  The packaged native Details screenshot was inspected.
+- VST3 SHA-256: `0C8951F866C2D191C171F32642EB2B9A74D71EB54AA9D49BE449DFF9FB1E5DF5`.
+- Details / Back now occupies the same upper-right header position in both views.
+  Native Bypass sits to its left; the old lower/left navigation buttons are removed.
+- Browser checks confirmed both navigation states and parameter preservation.
+  Invalid advanced values correctly reopen Details for correction before rendering.
+- This is a layout change; DSP and parameter IDs are unchanged.
+
 ## 0.4.1 — parameter help and Details page
 
 - Native source commit: `3684876abfd7abe26ace980eb739e7fc72a7f2da`.
