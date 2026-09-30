@@ -1,4 +1,37 @@
-# ORBIT 0.2.0 native validation — 2026-09-30
+# ORBIT native validation — 2026-09-30
+
+## 0.3.0 — precision faders and Reverb halo
+
+- Native source commit: `17cdfa4399e2baf1b04857e65c3d08c30ccd9cc0`.
+- Successful Windows build: https://github.com/bruceyxli/TimeVarying-Convolutional-Granular-Synth/actions/runs/36786088397
+- VST3 module: 7,178,752 bytes; SHA-256:
+  `E05E05D5CAE5C2346C64E20708CAE46F6BF6DC5210584FAB74C127B2BA699A0B`.
+- Four redesigned faders, fine dragging, default reset, smoothly parameter-driven
+  ring geometry and a dedicated Reverb dial. Native white/off and blue/80% images
+  were rendered and visually checked; matching web states were checked in-browser.
+- Reverb adds a prepared, damped stereo room after the granular mix and before output
+  gain/ceiling. Amount zero preserves the old path; bypass smoothly reaches dry unity.
+- Native regression tests now cover a real stereo tail, decay, exact Reverb block-size
+  invariance, zero-amount transparency, bypass, sample-rate extremes, automated amount
+  changes and state recall. No callback C++ heap allocations detected.
+- pluginval 1.0.4 strictness 5 passed in CI and locally for the actual 0.3.0 VST3.
+- Local dense benchmark with Reverb at 100%, same setup described below:
+  p50 **2.1 us**, p95 **231.7 us**, p99 **271.7 us**, max **450.0 us**;
+  **0 / 3000** blocks exceeded 1333.33 us. This is a short measurement, not a guarantee.
+- 23 Python tests passed, including independent sample-by-sample checking of the
+  offline room impulse response, zero amount, stereo decay and input validation.
+  A 10-second web render with Reverb at 80% completed and exposed a downloadable WAV.
+
+Reverb is independent of the existing grain presets. It defaults off and is appended
+to the native parameter list; old state without it is migrated to zero. The web uses
+a cached three-second room impulse response and offline convolution, while the native
+plugin runs the corresponding delay network continuously. The existing Python
+renderer and native granular engine still differ as documented in the plugin README.
+
+Real DAW session/soak testing remains required. No new claims of production
+certification or sample-identical Python/native granular output are made.
+
+## 0.2.0 baseline
 
 This is an initial Windows x64 VST3 build, not a completed DAW certification.
 
