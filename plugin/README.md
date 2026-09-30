@@ -35,6 +35,13 @@ both the native UI and the host bypass parameter transition to dry unity.
   IR length (8/16/24/32 ms), five IR-selection strategies and a saved random seed.
 - Five factory presets are starting points. Modified settings show Custom.
 - Session state persists all parameters. Closing the editor does not stop processing.
+- **Save** beside the preset selector opens a small naming panel. Enter a name and
+  press Save/Enter; the preset appears under **User**. Escape/Cancel closes the panel.
+  All 13 parameters are saved, including Reverb, output gain, seed and bypass.
+  Same-name saves create a numbered copy. User presets persist across DAW restarts
+  as `.orbitpreset` files in `%APPDATA%\ORBIT\Presets` on Windows (up to 256).
+  The library refreshes when the selector opens, including saves by other instances.
+  Factory presets now recall complete settings; modified values display Custom.
 - Existing 0.2 sessions load with Reverb off. The new parameter is appended without
   changing existing IDs/order. The host tail allowance is now 3 seconds.
 

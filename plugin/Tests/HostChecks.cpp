@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "UserPresetStore.h"
 #include <iostream>
 #include <stdexcept>
 
@@ -20,6 +21,28 @@ int main(int argc,char** argv) {
         require(std::abs(processor.state.getRawParameterValue("reverb")->load()-.72f)<.001f,"Reverb state roundtrip");
         processor.setStateInformation("invalid",7);
         require(processor.state.getRawParameterValue("density")->load()==117,"Invalid state changed parameters");
+
+        // Disk persistence is exercised in an isolated temporary directory.
+        const auto presetFolder=juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("orbit-preset-test-"+juce::Uuid().toString());
+        UserPresetStore library(presetFolder);juce::String savedName;
+        const auto expected=UserPresetStore::capture(processor.state);
+        require(library.save(juce::String::fromUTF8("\xe5\x86\xb0\xe8\x93\x9d Room"),processor.state,savedName).wasOk(),"Preset file save");
+        const auto firstName=savedName;
+        require(library.save(firstName,processor.state,savedName).wasOk() && savedName==firstName+" (2)","Duplicate preset must create a copy");
+        require(library.save(" ",processor.state,savedName).failed(),"Empty preset name rejected");
+        for(const auto& id:UserPresetStore::ids())processor.state.getParameter(id)->setValueNotifyingHost(0);
+        UserPresetStore reopenedLibrary(presetFolder);
+        const auto restored=reopenedLibrary.list(processor.state);
+        require(restored.size()==2,"Saved presets survive a new library instance");
+        require(UserPresetStore::apply(restored.front(),processor.state),"Preset recall");
+        require(UserPresetStore::matches({firstName,expected},processor.state),"All preset parameters roundtrip including Reverb");
+        require(presetFolder.getChildFile("broken.orbitpreset").replaceWithText("{broken"),"Corrupt fixture write");
+        require(reopenedLibrary.list(processor.state).size()==2,"Malformed preset ignored without losing valid entries");
+        juce::var invalid=expected.clone();invalid.getDynamicObject()->setProperty("mix",2.0);
+        require(!UserPresetStore::apply({"invalid",invalid},processor.state),"Out-of-range preset rejected atomically");
+        require(UserPresetStore::matches({firstName,expected},processor.state),"Invalid preset must not partially change parameters");
+        for(const auto& file:presetFolder.findChildFiles(juce::File::findFiles,false))require(file.deleteFile(),"Remove temporary preset fixture");
+        require(presetFolder.deleteFile(),"Remove empty preset test folder");
 
         auto layout=processor.getBusesLayout();
         layout.inputBuses.set(0,juce::AudioChannelSet::mono());

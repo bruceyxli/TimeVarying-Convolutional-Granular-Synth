@@ -1,5 +1,17 @@
 #pragma once
 #include "PluginProcessor.h"
+#include "UserPresetStore.h"
+
+struct PresetCombo : juce::ComboBox {
+    std::function<void()> onOpen;
+    void showPopup() override { if(onOpen)onOpen();juce::ComboBox::showPopup(); }
+};
+struct PresetSavePanel : juce::Component {
+    void paint(juce::Graphics& g) override {
+        g.setColour(juce::Colour(0xff121c29));g.fillRoundedRectangle(getLocalBounds().toFloat(),8);
+        g.setColour(juce::Colour(0xff344c63));g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(.5f),8,1);
+    }
+};
 
 struct OrbitLook : juce::LookAndFeel_V4 {
     OrbitLook();
@@ -60,7 +72,14 @@ private:
     InputScope scope;
     OrbitPad pad;
     juce::Slider density,grain,pitch,mix,jitter,spread,lookback,output,seed,reverb;
-    juce::ComboBox preset,ir,strategy;
+    PresetCombo preset;
+    juce::ComboBox ir,strategy;
+    UserPresetStore presetStore;
+    std::vector<UserPresetStore::Entry> userPresets;
+    juce::TextButton savePreset{"Save"},confirmSave{"Save"},cancelSave{"Cancel"};
+    PresetSavePanel savePanel;
+    juce::TextEditor presetName;
+    juce::Label savePrompt,saveError;
     juce::TextButton previous{"<"},next{">"},details{"Details +"};
     juce::ToggleButton bypass{"Bypass"};
     using SliderAttachment=juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -73,6 +92,9 @@ private:
     void timerCallback() override;
     void applyPreset(int);
     void syncPreset();
+    void refreshPresets();
+    void showSavePreset();
+    void commitPreset();
     void setExpanded(bool);
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OrbitEditor)
 };

@@ -238,17 +238,29 @@ OrbitEditor::OrbitEditor(OrbitProcessor& p):AudioProcessorEditor(p),processor(p)
     strategy.addItemList({"Fixed","Cycle","Random","Weighted","Centroid"},1);
     ir.setTitle("IR length"); strategy.setTitle("IR selection"); preset.setTitle("Preset");
     preset.setTextWhenNothingSelected("Custom");
-    for(size_t i=0;i<presets.size();++i) preset.addItem(presets[i].name,static_cast<int>(i)+1);
-    for(auto* c:std::initializer_list<juce::Component*>{&scope,&pad,&preset,&ir,&strategy,&previous,&next,&details,&bypass}) addAndMakeVisible(c);
+    for(auto* c:std::initializer_list<juce::Component*>{&scope,&pad,&preset,&ir,&strategy,&previous,&next,&details,&bypass,&savePreset}) addAndMakeVisible(c);
+    addChildComponent(savePanel);
+    for(auto* c:std::initializer_list<juce::Component*>{&presetName,&savePrompt,&saveError,&confirmSave,&cancelSave})savePanel.addAndMakeVisible(c);
+    savePrompt.setText("Save preset",juce::dontSendNotification);
+    saveError.setColour(juce::Label::textColourId,juce::Colour(0xfff29ab3));
+    presetName.setFont(look.font(15));presetName.setInputRestrictions(64);presetName.setTitle("Preset name");
+    presetName.setColour(juce::TextEditor::backgroundColourId,background);
+    presetName.setColour(juce::TextEditor::textColourId,text);
+    presetName.setColour(juce::TextEditor::focusedOutlineColourId,blue);
+    savePreset.setTitle("Save preset");
+    savePreset.onClick=[this]{showSavePreset();};confirmSave.onClick=[this]{commitPreset();};
+    cancelSave.onClick=[this]{savePanel.setVisible(false);savePreset.grabKeyboardFocus();};
+    presetName.onReturnKey=[this]{commitPreset();};presetName.onEscapeKey=cancelSave.onClick;
     irAttachment=std::make_unique<ComboAttachment>(p.state,"ir",ir);
     strategyAttachment=std::make_unique<ComboAttachment>(p.state,"strategy",strategy);
     bypassAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"bypass",bypass);
     preset.onChange=[this]{if(preset.getSelectedId()>0) applyPreset(preset.getSelectedId()-1);};
-    previous.onClick=[this]{applyPreset((std::max(0,preset.getSelectedId()-1)+4)%5);};
-    next.onClick=[this]{applyPreset(preset.getSelectedId()%5);};
+    preset.onOpen=[this]{refreshPresets();};
+    previous.onClick=[this]{refreshPresets();const int count=preset.getNumItems();applyPreset(preset.getItemId((std::max(0,preset.getSelectedItemIndex())+count-1)%count)-1);};
+    next.onClick=[this]{refreshPresets();applyPreset(preset.getItemId((preset.getSelectedItemIndex()+1)%preset.getNumItems())-1);};
     details.onClick=[this]{setExpanded(!expanded);};
     setResizable(true,true); setExpanded(false); setSize(1000,620);
-    syncPreset(); startTimerHz(30);
+    refreshPresets(); startTimerHz(30);
 }
 OrbitEditor::~OrbitEditor() { stopTimer(); setLookAndFeel(nullptr); }
 void OrbitEditor::setExpanded(bool open) {
@@ -262,19 +274,49 @@ void OrbitEditor::setExpanded(bool open) {
     resized(); repaint();
 }
 void OrbitEditor::applyPreset(int index) {
+    if(index>=1000) {
+        const auto i=static_cast<size_t>(index-1000);
+        if(i<userPresets.size())UserPresetStore::apply(userPresets[i],processor.state);
+        syncPreset();repaint();return;
+    }
     const auto& p=presets[static_cast<size_t>(juce::jlimit(0,4,index))];
-    const std::array<std::pair<const char*,float>,8> targets{{{"density",p.density},{"grain",p.grain},{"pitch",p.pitch},{"mix",p.mix},{"jitter",p.jitter},{"spread",p.spread},{"ir",static_cast<float>(p.ir)},{"strategy",static_cast<float>(p.strategy)}}};
+    const std::array<std::pair<const char*,float>,13> targets{{{"density",p.density},{"grain",p.grain},{"pitch",p.pitch},{"mix",p.mix},{"jitter",p.jitter},{"spread",p.spread},{"ir",static_cast<float>(p.ir)},{"strategy",static_cast<float>(p.strategy)},{"reverb",0},{"lookback",40},{"output",-3},{"seed",2025},{"bypass",0}}};
     for(const auto& target:targets) { auto* parameter=processor.state.getParameter(target.first); parameter->beginChangeGesture(); parameter->setValueNotifyingHost(parameter->convertTo0to1(target.second)); parameter->endChangeGesture(); }
     syncPreset(); repaint(); pad.repaint();
 }
 void OrbitEditor::syncPreset() {
+    const int current=preset.getSelectedId()-1001;
+    if(current>=0 && static_cast<size_t>(current)<userPresets.size() && UserPresetStore::matches(userPresets[static_cast<size_t>(current)],processor.state))return;
     int selected=0;
     auto matches=[&](const char* id,float v){return std::abs(processor.state.getRawParameterValue(id)->load()-v)<.002f;};
     for(size_t i=0;i<presets.size();++i) {
         const auto& p=presets[i];
-        if(matches("density",p.density)&&matches("grain",p.grain)&&matches("pitch",p.pitch)&&matches("mix",p.mix)&&matches("jitter",p.jitter)&&matches("spread",p.spread)&&matches("ir",static_cast<float>(p.ir))&&matches("strategy",static_cast<float>(p.strategy))) selected=static_cast<int>(i)+1;
+        if(matches("density",p.density)&&matches("grain",p.grain)&&matches("pitch",p.pitch)&&matches("mix",p.mix)&&matches("jitter",p.jitter)&&matches("spread",p.spread)&&matches("ir",static_cast<float>(p.ir))&&matches("strategy",static_cast<float>(p.strategy))&&matches("reverb",0)&&matches("lookback",40)&&matches("output",-3)&&matches("seed",2025)&&matches("bypass",0)) selected=static_cast<int>(i)+1;
     }
+    for(size_t i=0;i<userPresets.size();++i)if(UserPresetStore::matches(userPresets[i],processor.state))selected=1001+static_cast<int>(i);
     preset.setSelectedId(selected,juce::dontSendNotification);
+}
+void OrbitEditor::refreshPresets() {
+    const auto previousName=preset.getSelectedId()>=1001?preset.getText():juce::String();
+    userPresets=presetStore.list(processor.state);
+    preset.clear(juce::dontSendNotification);preset.addSectionHeading("Factory");
+    for(size_t i=0;i<presets.size();++i)preset.addItem(presets[i].name,static_cast<int>(i)+1);
+    if(!userPresets.empty())preset.addSectionHeading("User");
+    for(size_t i=0;i<userPresets.size();++i)preset.addItem(userPresets[i].name,1001+static_cast<int>(i));
+    for(size_t i=0;i<userPresets.size();++i)if(userPresets[i].name==previousName)preset.setSelectedId(1001+static_cast<int>(i),juce::dontSendNotification);
+    syncPreset();
+}
+void OrbitEditor::showSavePreset() {
+    saveError.setText({},juce::dontSendNotification);
+    presetName.setText(preset.getSelectedId()>=1001?preset.getText():"My preset",false);
+    savePanel.setVisible(true);savePanel.toFront(false);presetName.grabKeyboardFocus();presetName.selectAll();
+}
+void OrbitEditor::commitPreset() {
+    juce::String savedName;const auto result=presetStore.save(presetName.getText(),processor.state,savedName);
+    if(result.failed()){saveError.setText(result.getErrorMessage(),juce::dontSendNotification);return;}
+    refreshPresets();
+    for(size_t i=0;i<userPresets.size();++i)if(userPresets[i].name==savedName)preset.setSelectedId(1001+static_cast<int>(i),juce::dontSendNotification);
+    savePanel.setVisible(false);savePreset.grabKeyboardFocus();
 }
 void OrbitEditor::timerCallback() {
     bool changed=false;
@@ -289,6 +331,11 @@ void OrbitEditor::resized() {
     const float s=static_cast<float>(getWidth())/1000;
     auto place=[&](juce::Component& c,int x,int y,int w,int h){c.setBounds(juce::Rectangle<float>(static_cast<float>(x)*s,static_cast<float>(y)*s,static_cast<float>(w)*s,static_cast<float>(h)*s).toNearestInt());};
     place(preset,390,28,220,32); place(previous,344,28,30,32); place(next,626,28,30,32); place(bypass,865,28,95,32);
+    place(savePreset,675,28,60,32);place(savePanel,320,92,360,160);
+    const float panelScale=static_cast<float>(savePanel.getWidth())/360;
+    auto inPanel=[&](juce::Component& c,int x,int y,int w,int h){c.setBounds(juce::roundToInt(x*panelScale),juce::roundToInt(y*panelScale),juce::roundToInt(w*panelScale),juce::roundToInt(h*panelScale));};
+    inPanel(savePrompt,18,10,320,24);inPanel(presetName,20,42,320,32);inPanel(saveError,18,78,324,28);
+    inPanel(cancelSave,183,117,72,28);inPanel(confirmSave,268,117,72,28);
     place(scope,45,116,210,106); place(pad,288,99,420,388);
     place(density,40,330,220,26); place(grain,40,416,220,26);
     place(pitch,735,245,220,26); place(mix,735,416,220,26);
