@@ -1,5 +1,17 @@
 # ORBIT native validation — 2026-09-30
 
+## 0.4.3 — English descriptions
+
+- Native source commit: `c1678ba4cd84bab468a42fed1add23a5e98a5678`.
+- Windows build: https://github.com/bruceyxli/TimeVarying-Convolutional-Granular-Synth/actions/runs/36792998379
+- Build, DSP/host checks and pluginval 1.0.4 strictness 5 passed in CI.
+- VST3 SHA-256: `A89D77B4C9B182FE10FCB49C5F73E3A9C318FF720EA3E5E3FC0095347D691017`.
+- All 15 native and 16 web parameter descriptions now use English, including
+  advanced settings and XY help. Native input-scope and bypass help are English too.
+- Checked application source for remaining Chinese descriptions; JavaScript syntax
+  and browser tooltip text/wrapping were verified. User-provided preset names remain
+  unchanged. This update changes copy only; DSP and parameter IDs are unchanged.
+
 ## 0.4.2 — shared header navigation
 
 - Native source commit: `0d1e6665bca4ddbe59bb8809e53b836a1e7f3a18`.
