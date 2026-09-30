@@ -1,5 +1,18 @@
 # ORBIT native validation — 2026-09-30
 
+## 0.3.1 — luminous XY cursor
+
+UI-only update: graduated optical bloom, a highlighted core, segmented locator ring,
+and hover/drag feedback. The point still follows Reverb colour. DSP and parameter
+semantics are unchanged. Web JavaScript syntax and browser rendering were checked.
+
+- Native source: `0c3720f26f285acbaa2fb2804b43f11308cb4346`.
+- Successful build, native regression/host tests and pluginval strictness 5:
+  https://github.com/bruceyxli/TimeVarying-Convolutional-Granular-Synth/actions/runs/36787041042
+- Native editor paint/reopen checks also passed locally; rendered white/blue views
+  were inspected. No additional real DAW session testing was performed.
+- VST3 SHA-256: `78942D244E44CB9F6BCA9197C3514E2A7073DBB528AF7652330673A6723337F4`.
+
 ## 0.3.0 — precision faders and Reverb halo
 
 - Native source commit: `17cdfa4399e2baf1b04857e65c3d08c30ccd9cc0`.
