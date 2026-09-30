@@ -63,6 +63,24 @@ int main(int argc,char** argv) {
             require(editor && editor->getWidth()>0,"Editor creation");
             auto snapshot=editor->createComponentSnapshot(editor->getLocalBounds(),true);
             require(snapshot.isValid(),"Native editor rendering");
+            juce::TextButton* navigation=nullptr;
+            for(auto* child:editor->getChildren())
+                if(auto* button=dynamic_cast<juce::TextButton*>(child);button && button->getButtonText()=="Details >")navigation=button;
+            require(navigation!=nullptr,"Details navigation available");
+            const auto initialBounds=editor->getBounds();
+            const auto initialSettings=UserPresetStore::capture(processor.state);
+            navigation->onClick();
+            require(navigation->getButtonText()=="< Back" && editor->getBounds()==initialBounds,"Details changes page without resizing the host window");
+            if(argc>1) {
+                const juce::File path(juce::String::fromUTF8(argv[1]));
+                const auto detailImage=path.getSiblingFile(path.getFileNameWithoutExtension()+"-details.png");
+                auto stream=detailImage.createOutputStream();
+                require(stream!=nullptr,"Details screenshot output");
+                require(juce::PNGImageFormat().writeImageToStream(editor->createComponentSnapshot(editor->getLocalBounds(),true),*stream),"Details screenshot encoding");
+            }
+            navigation->onClick();
+            require(navigation->getButtonText()=="Details >" && editor->getBounds()==initialBounds,"Return to main page");
+            require(UserPresetStore::matches({"before navigation",initialSettings},processor.state),"Page navigation preserves every parameter");
             if(argc>1) {
                 juce::File path(juce::String::fromUTF8(argv[1]));
                 path.deleteFile();

@@ -275,27 +275,30 @@ juce::String OrbitEditor::getTooltip() {
     // Parameter names and large readouts are painted on the editor itself.
     const auto point=getMouseXYRelative().toFloat()*(1000.0f/static_cast<float>(getWidth()));
     const auto hit=[&](int x,int y,int w,int h){return juce::Rectangle<float>(static_cast<float>(x),static_cast<float>(y),static_cast<float>(w),static_cast<float>(h)).contains(point);};
+    if(expanded) {
+        if(hit(40,238,265,57))return orbitParameterHelp("jitter");
+        if(hit(40,329,265,57))return orbitParameterHelp("spread");
+        if(hit(40,420,265,57))return orbitParameterHelp("seed");
+        if(hit(368,238,265,62))return orbitParameterHelp("ir");
+        if(hit(368,329,265,59))return orbitParameterHelp("strategy");
+        if(hit(368,420,265,57))return orbitParameterHelp("lookback");
+        if(hit(690,238,268,57))return orbitParameterHelp("output");
+        if(hit(690,329,268,72))return orbitParameterHelp("reverb");
+        return {};
+    }
     if(hit(40,255,220,102))return orbitParameterHelp("density");
     if(hit(40,380,220,63))return orbitParameterHelp("grain");
     if(hit(735,169,220,103))return orbitParameterHelp("pitch");
     if(hit(735,310,220,133))return orbitParameterHelp("mix");
     if(hit(440,503,170,58))return orbitParameterHelp("reverb");
-    if(expanded) {
-        if(hit(40,588,265,52))return orbitParameterHelp("jitter");
-        if(hit(40,666,265,52))return orbitParameterHelp("spread");
-        if(hit(368,588,265,52))return orbitParameterHelp("lookback");
-        if(hit(368,666,265,52))return orbitParameterHelp("output");
-        if(hit(690,580,100,56))return orbitParameterHelp("ir");
-        if(hit(808,580,150,56))return orbitParameterHelp("strategy");
-        if(hit(690,666,268,52))return orbitParameterHelp("seed");
-    }
     return {};
 }
 void OrbitEditor::setExpanded(bool open) {
     expanded=open;
     for(auto* c:std::initializer_list<juce::Component*>{&jitter,&spread,&lookback,&output,&seed,&ir,&strategy}) c->setVisible(open);
-    details.setButtonText(open?"Details -":"Details +");
-    const int height=open?820:620;
+    for(auto* c:std::initializer_list<juce::Component*>{&scope,&pad,&density,&grain,&pitch,&mix}) c->setVisible(!open);
+    details.setButtonText(open?"< Back":"Details >");
+    const int height=620;
     setResizeLimits(800,height*8/10,1600,height*16/10);
     getConstrainer()->setFixedAspectRatio(1000.0/height);
     if(getWidth()>0) setSize(getWidth(),getWidth()*height/1000);
@@ -369,9 +372,10 @@ void OrbitEditor::resized() {
     place(pitch,735,245,220,26); place(mix,735,416,220,26);
     place(details,40,515,100,28);
     place(reverb,445,503,58,58);
-    place(jitter,40,610,265,30); place(spread,40,688,265,30);
-    place(lookback,368,610,265,30); place(output,368,688,265,30);
-    place(ir,690,604,100,32); place(strategy,808,604,150,32); place(seed,690,688,268,30);
+    place(jitter,40,265,265,30); place(spread,40,356,265,30);place(seed,40,447,265,30);
+    place(lookback,368,447,265,30); place(output,690,265,268,30);
+    place(ir,368,268,245,32); place(strategy,368,356,245,32);
+    if(expanded) {place(details,40,112,90,28);place(reverb,690,340,58,58);}
 }
 void OrbitEditor::paint(juce::Graphics& graphics) {
     graphics.fillAll(background);
@@ -379,7 +383,23 @@ void OrbitEditor::paint(juce::Graphics& graphics) {
     auto label=[&](const juce::String& str,float x,float y,float w,float h,float size,juce::Colour colour=text,juce::Justification align=juce::Justification::left){g.setFont(look.font(size));g.setColour(colour);g.drawText(str,juce::Rectangle<float>(x,y,w,h),align);};
     g.setColour(blue); g.drawEllipse(45,33,21,21,1.4f);g.drawEllipse(49,37,13,13,1);
     label("O R B I T",82,25,225,38,26);
-    g.setColour(line);g.drawHorizontalLine(82,40,960);g.drawHorizontalLine(497,40,960);
+    g.setColour(line);g.drawHorizontalLine(82,40,960);
+    if(expanded) {
+        label("DETAILS",155,108,220,36,26);
+        label("GRAIN MOTION",45,193,240,20,11,blue);
+        label("CONVOLUTION",373,193,240,20,11,blue);
+        label("SPACE / OUTPUT",695,193,260,20,11,blue);
+        g.setColour(line);g.drawHorizontalLine(224,40,305);g.drawHorizontalLine(224,368,633);g.drawHorizontalLine(224,690,958);
+        label("JITTER",45,242,220,18,10,muted);label("SPREAD",45,333,220,18,10,muted);
+        label("SEED",45,424,220,18,10,muted);label("LOOKBACK",373,424,220,18,10,muted);
+        label("IR LENGTH",373,242,220,18,10,muted);label("SELECTION",373,333,220,18,10,muted);
+        label("OUTPUT",695,242,220,18,10,muted);label("REVERB",763,347,160,18,10,muted);
+        label(reverb.getValue()<.0005?"OFF":juce::String(reverb.getValue()*100,0)+"%",763,369,160,24,20,reverb.getValue()>0?blue:text);
+        g.setColour(line);g.drawHorizontalLine(539,40,960);
+        label("VST3",916,561,44,20,10,muted,juce::Justification::right);
+        return;
+    }
+    g.setColour(line);g.drawHorizontalLine(497,40,960);
     label("DENSITY",45,259,180,20,11,muted); label("X",239,259,16,20,10,muted);
     label(juce::String(density.getValue(),0),45,280,95,48,44);label("grains/s",142,300,75,20,11,muted);
     label("GRAIN SIZE",45,383,125,20,11,muted);label(juce::String(grain.getValue(),1)+" ms",170,383,85,20,11,muted,juce::Justification::right);
@@ -392,10 +412,4 @@ void OrbitEditor::paint(juce::Graphics& graphics) {
     label("REVERB",513,513,95,17,10,muted);
     label(reverb.getValue()<.0005?"OFF":juce::String(reverb.getValue()*100,0)+"%",513,532,85,20,15,reverb.getValue()>0?blue:text);
     label("VST3",916,561,44,20,10,muted,juce::Justification::right);
-    if(expanded) {
-        g.setColour(line);g.drawHorizontalLine(578,40,960);
-        label("JITTER",45,588,220,18,10,muted);label("SPREAD",45,666,220,18,10,muted);
-        label("LOOKBACK",373,588,220,18,10,muted);label("OUTPUT",373,666,220,18,10,muted);
-        label("IR",690,580,100,18,10,muted);label("SELECTION",808,580,150,18,10,muted);label("SEED",695,666,250,18,10,muted);
-    }
 }
