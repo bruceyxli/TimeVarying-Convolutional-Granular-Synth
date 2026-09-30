@@ -424,22 +424,22 @@ start();
 // One lightweight tooltip; descriptions are also available to screen readers.
 function installParameterHelp() {
   const descriptions = {
-    "density": "Density · 颗粒密度\n每秒触发的颗粒数。越高越密集，越低越稀疏。",
-    "grain": "Grain size · 颗粒时长\n每个颗粒持续的时间。较短更细碎，较长保留更多原声细节。",
-    "pitch": "Pitch scatter · 音高散布\n每个颗粒随机升降音高的范围，以半音计。0 保持原音高。",
-    "wet": "Dry / Wet · 干湿比\n混合原始输入与颗粒效果。0% 为原声，100% 为颗粒声；Reverb 在混合后加入。",
-    "reverb": "Reverb · 混响\n增加空间感与尾音。0 关闭混响，光环为白色；增大后光环变蓝、光晕增强。",
-    "jitter": "Jitter · 触发抖动\n随机偏移颗粒触发时间。0 更规律，增大后节奏更松散。",
-    "pan": "Spread · 立体声散布\n颗粒在左右声道间随机分布的宽度。0 居中，增大后更宽。",
-    "seed": "Seed · 随机种子\n改变随机变化的序列。相同输入、种子与起始状态可复现相同变化。",
-    "variant": "Signal path · 信号路径\n选择逐颗粒卷积、先卷积再颗粒化，或用颗粒作为脉冲响应。",
-    "strategy": "Selection · IR 选择\n选择每个颗粒的响应：固定、轮换、随机、加权，或按频谱重心匹配。",
-    "ir-ms": "IR · 脉冲响应长度\n控制每颗粒卷积的短响应时长。较短更紧凑，较长带来更多共鸣。",
-    "bank-size": "Bank size · IR 数量\n生成的短脉冲响应数量。越多，可选音色越丰富，也会增加准备时间。",
-    "long-ir": "Long IR · 长响应\n先卷积模式下的脉冲响应时长。越长，空间尾音越明显。",
-    "duration": "Duration · 渲染时长\n生成音频的总长度，单位为秒。",
-    "sample-rate": "Sample rate · 采样率\n选择输出音频的采样率。更高采样率会增加运算量与文件体积。",
-    "orbit-pad": "XY · 声音控制\n左右改变颗粒密度，上下改变音高散布。也可使用两侧推子调整。"
+    "density": "Density\nGrains triggered per second. Higher values create a denser texture; lower values leave more space.",
+    "grain": "Grain Size\nThe duration of each grain. Short grains sound more fragmented; longer grains retain more of the source.",
+    "pitch": "Pitch Scatter\nRandom pitch variation per grain, in semitones. Zero keeps the original pitch.",
+    "wet": "Dry / Wet\nBlends the original input with the grain effect. 0% is dry; 100% is wet. Reverb is applied after this mix.",
+    "reverb": "Reverb\nAdds space and a decaying tail. At zero, the halo is white. Higher amounts turn it blue and increase the glow.",
+    "jitter": "Trigger Jitter\nRandom variation in grain timing. Zero gives regular triggers; higher values create a looser rhythm.",
+    "pan": "Stereo Spread\nThe width of random grain panning. Zero keeps grains centered; higher values spread them across the stereo field.",
+    "seed": "Random Seed\nChanges the random sequence. The same input, seed and starting state reproduce the same variation.",
+    "variant": "Signal Path\nSelect per-grain convolution, convolution before granulation, or grains used as impulse responses.",
+    "strategy": "IR Selection\nChooses a response for each grain: fixed, cycling, random, weighted, or matched by spectral centroid.",
+    "ir-ms": "IR Length\nThe duration of each grain's impulse response. Shorter responses feel tighter; longer ones add more resonance.",
+    "bank-size": "Bank Size\nThe number of generated impulse responses. A larger bank offers more variety and takes longer to prepare.",
+    "long-ir": "Long IR\nThe impulse response duration in Convolve then Granulate mode. Longer responses create a more pronounced tail.",
+    "duration": "Duration\nThe total length of the rendered audio, in seconds.",
+    "sample-rate": "Sample Rate\nThe output sample rate. Higher rates increase processing time and file size.",
+    "orbit-pad": "XY Pad\nMove horizontally to change Density and vertically to change Pitch Scatter. The side sliders control the same parameters."
   };
 
   const tooltip = document.createElement("div");

@@ -21,7 +21,7 @@ advanced settings; repeated names create numbered copies. The native plugin stor
 files in `%APPDATA%\ORBIT\Presets` on Windows. The web version stores its own library
 in this browser for the current site address; clearing site data removes it.
 These are parameter presets, without source audio, and the two libraries are separate.
-Hover over a parameter or its label for a short Chinese description. The web
+Hover over a parameter or its label for a short English description. The web
 interface also shows descriptions on keyboard focus; Escape dismisses the popup.
 The upper-right **Details / Back** button switches between the instrument and
 the parameter page from the same position, with all current values preserved.
