@@ -1,0 +1,49 @@
+name: ORBIT Windows VST3
+on:
+  workflow_dispatch:
+  push:
+    paths: ['plugin/**', 'web/fonts/**', '.github/workflows/vst3.yml']
+  pull_request:
+    paths: ['plugin/**', 'web/fonts/**', '.github/workflows/vst3.yml']
+concurrency:
+  group: vst3-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S plugin -B plugin/build -A x64
+      - name: Build
+        run: cmake --build plugin/build --config Release --parallel 4
+      - name: DSP regression and allocation tests
+        run: ctest --test-dir plugin/build -C Release --output-on-failure -V
+      - name: Validate VST3
+        shell: pwsh
+        run: |
+          Invoke-WebRequest 'https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip' -OutFile pluginval.zip
+          Expand-Archive pluginval.zip pluginval
+          $validator = Get-ChildItem pluginval -Recurse -Filter pluginval.exe | Select-Object -First 1
+          & $validator.FullName --strictness-level 5 --validate-in-process --validate "$pwd/plugin/build/Orbit_artefacts/Release/VST3/ORBIT.vst3"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package
+          Copy-Item -Recurse plugin/build/Orbit_artefacts/Release/VST3/ORBIT.vst3 package/
+          Copy-Item plugin/build/Orbit_artefacts/Release/Standalone/ORBIT.exe package/
+          New-Item -ItemType Directory -Force package/checks
+          Copy-Item plugin/build/Release/orbit_dsp_tests.exe package/checks/
+          Copy-Item plugin/build/OrbitChecks_artefacts/Release/OrbitChecks.exe package/checks/
+          & package/checks/OrbitChecks.exe "$pwd/package/ORBIT-native.png"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item plugin/README.md package/README.md
+          Copy-Item web/fonts/OFL.txt package/Oxanium-OFL.txt
+          Copy-Item plugin/build/_deps/juce-src/LICENSE.md package/JUCE-LICENSE.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ORBIT-Windows-x64
+          path: package/
+          if-no-files-found: error

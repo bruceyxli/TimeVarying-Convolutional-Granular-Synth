@@ -1,7 +1,10 @@
 # Windows VST3 migration plan
 
-The target is a Windows x64 VST3 built with C++/JUCE. The current Python application
-is the offline reference engine. No VST3 binary or callback-safe engine exists yet.
+The target is a Windows x64 VST3 built with C++/JUCE. The Python application
+is the offline reference engine. The first native implementation now lives in
+`plugin/`: Standard mode, preallocated C++ DSP, JUCE host integration, automated
+Windows builds and the cold-blue ORBIT editor with live stereo input display.
+See `plugin/README.md` for implemented scope and intentional sound differences.
 Keep the reference renderer and regression tests during the port instead of embedding
 Python/Streamlit in the audio callback.
 
@@ -36,7 +39,8 @@ Audio-thread responsibilities:
 - Read parameter snapshots without locks, schedule events with absolute sample positions,
   and update active grains. Processing must not depend on where the host splits blocks.
 - Perform no heap allocation, file I/O, filter design, logging, UI calls or waiting.
-- Use bounded voice stealing with a short fade when the grain pool is exhausted.
+- Use bounded overload handling. The first implementation drops new events when
+  its 48 voices are occupied, preserving existing tails without a discontinuity.
 - Smooth continuous controls; change FFT/grain resources at defined boundaries.
 - Handle host bypass, suspend/resume, transport reset, sample-rate changes and denormals.
 
@@ -53,6 +57,32 @@ Variant A requires streaming partitioned convolution before granulation. Standar
 uses per-grain convolution; Variant B uses each prepared grain as its kernel.
 Measure direct versus FFT convolution for short kernels before selecting the C++ path.
 Report actual processing latency to the host and align dry/wet paths accordingly.
+
+### Left-side live input display
+
+The left waveform window in the VST3 effect must show the actual DAW input in real
+time, before granular processing and wet/dry mixing. This replaces the static demo
+or uploaded-file preview used by the current offline webpage.
+
+- Keep the minimal ORBIT layout: one small `INPUT` label and a scrolling waveform;
+  no explanatory copy or required file import in live effect mode.
+- Show approximately the most recent second of input with a fixed amplitude scale.
+  Preserve stereo activity using separate L/R traces, rather than summing channels
+  and hiding opposite-phase signals. Indicate clipping subtly at the display edge.
+- Display real incoming samples, not a decorative animation. Silence scrolls to a
+  flat baseline; if callbacks stop, clear stale audio after the display window elapses.
+  Host transport stopping must not suppress monitoring if live input still arrives.
+- Reduce samples to min/max envelopes on the audio thread, pushing them into a
+  preallocated single-producer/single-consumer queue without allocating or blocking.
+  If the UI falls behind, drop visualization data rather than delay audio processing.
+- The editor consumes the envelopes and paints at approximately 30 fps. Display
+  buffering adds no audio-path delay. Opening/closing the editor and changing sample
+  rates must safely reset or reconnect the display without affecting DSP.
+- Validate mono/stereo input, opposite-phase stereo, silence, clipping, stopped
+  callbacks, live input with stopped transport, and editor reopen behavior.
+
+This is a requirement for the C++ VST3 implementation; the current webpage remains
+an offline renderer and must not label its static source preview as live input.
 
 ## 4. Parameters and saved state
 
@@ -83,6 +113,8 @@ identity and restore missing-file errors without blocking the audio thread.
 5. VST3 validation plus FL Studio, Ableton Live and REAPER checks: scanning, state
    restore, bypass, automation, offline export and project reload.
 
-The present optimization delivers cached preparation, explicit validation, independent
-audio I/O, numerical regression tests and a repeatable performance baseline. The next
-implementation milestone is the Standard C++ DSP core and its block-processing tests.
+The first native implementation covers Standard DSP, block-processing regression
+tests, allocation checks, state/mono/editor tests and pluginval validation in CI.
+Remaining release work includes real DAW session/soak checks, broader callback
+timing measurements and a measured sound comparison with the Python reference.
+Variant A/B and custom IR import remain later milestones.

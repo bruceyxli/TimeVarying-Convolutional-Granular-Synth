@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ORBIT — Granular instrument</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main class="instrument">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Orbit home"><span class="brand-symbol" aria-hidden="true">◉</span> ORBIT</a>
+      <nav class="preset-picker" aria-label="Preset browser">
+        <button class="icon-button" id="previous-preset" aria-label="Previous preset">←</button>
+        <select id="preset" aria-label="Sound preset"><option>Airy shimmer</option></select>
+        <button class="icon-button" id="next-preset" aria-label="Next preset">→</button>
+      </nav>
+      <div class="header-actions">
+        <button class="icon-button" id="reset" aria-label="Reset preset" title="Reset preset">↺</button>
+        <div class="engine-status" role="status" aria-label="Connecting" title="Connecting"><span class="status-dot" id="engine-dot"></span></div>
+      </div>
+    </header>
+
+    <section class="workspace" aria-label="Instrument controls">
+      <aside class="control-column left-column">
+        <div class="source-block" id="drop-zone">
+          <div class="source-heading"><h1 id="source-name">Harmonic drift</h1><span id="source-kind">DEMO</span></div>
+          <p id="source-meta">10.0 s</p>
+          <canvas id="source-wave" class="source-wave" role="img" aria-label="Source audio peak waveform"></canvas>
+          <button class="import-button" id="upload-button"><span>＋</span> Import</button>
+          <input type="file" id="source-file" accept=".wav,.flac,.aiff,.aif,.ogg" hidden>
+          <button class="text-button demo-button" id="use-demo" hidden>Use demo</button>
+        </div>
+        <div class="parameter main-parameter">
+          <div class="parameter-heading"><label for="density">DENSITY</label><span class="axis">X</span></div>
+          <div class="large-value"><output id="density-value" for="density">80</output><span>grains/s</span></div>
+          <input id="density" type="range" min="10" max="120" step="1" value="80">
+        </div>
+        <div class="parameter secondary-parameter">
+          <div class="parameter-heading"><label for="grain">GRAIN SIZE</label><span><output id="grain-value" for="grain">15</output> ms</span></div>
+          <input id="grain" type="range" min="5" max="50" step="1" value="15">
+        </div>
+      </aside>
+
+      <section class="orbit-column" aria-label="XY sound exploration">
+        <div class="orbit-stage" id="orbit-pad" role="group" aria-label="XY pad: horizontal density, vertical pitch scatter. Use the Density and Pitch Scatter sliders for keyboard control.">
+          <canvas id="orbit-art" aria-hidden="true"></canvas>
+          <span id="xy-handle" class="xy-handle" aria-hidden="true"></span>
+        </div>
+      </section>
+
+      <aside class="control-column right-column">
+        <div class="parameter main-parameter">
+          <div class="parameter-heading"><label for="pitch">PITCH SCATTER</label><span class="axis">Y</span></div>
+          <div class="large-value"><span class="plusminus">±</span><output id="pitch-value" for="pitch">5</output><span>st</span></div>
+          <input id="pitch" type="range" min="0" max="12" step="1" value="5">
+        </div>
+        <div class="mix-section">
+          <div class="mix-dial" id="mix-dial" aria-hidden="true"><div><span id="wet-dial-value">65</span><small>%</small></div></div>
+          <div class="mix-description"><label for="wet">DRY / WET</label></div>
+        </div>
+        <input id="wet" type="range" min="0" max="1" step="0.01" value="0.65" aria-label="Dry wet mix">
+      </aside>
+    </section>
+
+    <section class="detail-section">
+      <button class="detail-toggle" id="detail-toggle" aria-expanded="false" aria-controls="detail-panel">Details <span id="detail-sign">+</span></button>
+      <div id="detail-panel" class="detail-panel" hidden>
+        <div class="detail-group">
+          <h2>GRAIN MOTION</h2>
+          <label for="jitter">Trigger jitter <output id="jitter-value">8%</output></label><input id="jitter" type="range" min="0" max="0.5" step="0.01" value="0.08">
+          <label for="pan">Stereo spread <output id="pan-value">60%</output></label><input id="pan" type="range" min="0" max="1" step="0.01" value="0.6">
+          <label for="seed">Random seed</label><input id="seed" type="number" min="0" max="2147483647" step="1" value="2025">
+        </div>
+        <div class="detail-group">
+          <h2>CONVOLUTION</h2>
+          <label for="variant">Signal path</label><select id="variant"><option value="standard">Per-grain convolution</option><option value="variant_a">Convolve → Granulate</option><option value="variant_b">Grains as IR</option></select>
+          <div id="micro-ir-controls"><label for="strategy">IR selection</label><select id="strategy"><option value="weighted">Weighted</option><option value="centroid">Spectral centroid</option><option value="random">Random</option><option value="cycle">Cycle</option><option value="fixed">Fixed</option></select>
+          <div class="two-up"><div><label for="ir-ms">IR length · ms</label><input id="ir-ms" type="number" min="6" max="32" value="14"></div><div><label for="bank-size">Bank size</label><input id="bank-size" type="number" min="8" max="128" value="64"></div></div></div>
+          <div id="long-ir-controls" hidden><label for="long-ir">Long IR · ms</label><input id="long-ir" type="number" min="40" max="300" step="5" value="120"></div>
+        </div>
+        <div class="detail-group">
+          <h2>RENDER SETTINGS</h2>
+          <label for="duration">Duration <output id="duration-value">10 s</output></label><input id="duration" type="range" min="2" max="40" step="0.1" value="10">
+          <label for="sample-rate">Sample rate</label><select id="sample-rate"><option value="48000">48,000 Hz</option><option value="44100">44,100 Hz</option></select>
+        </div>
+      </div>
+    </section>
+
+    <section class="transport" aria-label="Render and playback">
+      <button id="render" class="render-button" disabled><span class="render-icon">↗</span><span id="render-label">Render</span></button>
+      <button id="play" class="play-button" aria-label="Play rendered audio" disabled>▶</button>
+      <div class="timeline"><canvas id="output-wave" role="img" aria-label="Rendered audio waveform"></canvas><input id="seek" type="range" min="0" max="1000" value="0" aria-label="Playback position" disabled></div>
+      <span class="timecode"><span id="current-time">0:00</span><span id="total-time"> / 0:10</span></span>
+      <a id="download" class="download-button" aria-label="Download 24-bit stereo WAV" aria-disabled="true">WAV <span>↓</span></a>
+      <audio id="audio" preload="auto"></audio>
+    </section>
+    <div class="feedback"><p id="message" role="status" aria-live="polite"></p></div>
+  </main>
+</body>
+</html>

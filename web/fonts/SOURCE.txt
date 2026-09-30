@@ -1,0 +1,4 @@
+Oxanium by Severin Meyer
+https://fonts.google.com/specimen/Oxanium
+https://raw.githubusercontent.com/google/fonts/main/ofl/oxanium/Oxanium%5Bwght%5D.ttf
+SIL Open Font License 1.1; see OFL.txt.

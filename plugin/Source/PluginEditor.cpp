@@ -1,0 +1,222 @@
+#include "PluginEditor.h"
+#include <BinaryData.h>
+#include <cmath>
+
+namespace {
+const juce::Colour background{0xff0c1118}, line{0xff263447}, text{0xffdfebf8}, muted{0xff91a5bc};
+const juce::Colour blue{0xff82cfff}, cyan{0xffa4deee};
+struct Preset { const char* name; float density,grain,pitch,mix,jitter,spread; int ir,strategy; };
+const std::array<Preset,5> presets{{
+    {"Original-like",100,35,1,.3f,.02f,.2f,0,0},
+    {"Airy shimmer",80,15,5,.65f,.08f,.6f,1,3},
+    {"Warm body",60,25,2,.5f,.05f,.3f,2,4},
+    {"Sparse sparkles",30,12,7,.7f,.12f,.9f,0,2},
+    {"Percussive microroom",50,10,0,.4f,.04f,.4f,0,0}
+}};
+const std::array<const char*,12> parameterIds{{"density","grain","pitch","mix","jitter","spread","lookback","output","ir","strategy","seed","bypass"}};
+}
+
+OrbitLook::OrbitLook() {
+    face=juce::Typeface::createSystemTypefaceFor(BinaryData::oxanium_ttf,BinaryData::oxanium_ttfSize);
+    setColour(juce::ComboBox::backgroundColourId,background);
+    setColour(juce::ComboBox::textColourId,text);
+    setColour(juce::ComboBox::outlineColourId,line);
+    setColour(juce::ComboBox::arrowColourId,muted);
+    setColour(juce::PopupMenu::backgroundColourId,background);
+    setColour(juce::PopupMenu::textColourId,text);
+    setColour(juce::PopupMenu::highlightedBackgroundColourId,line);
+    setColour(juce::TextButton::buttonColourId,background);
+    setColour(juce::TextButton::textColourOffId,muted);
+    setColour(juce::ToggleButton::textColourId,muted);
+    setColour(juce::ToggleButton::tickColourId,blue);
+    setColour(juce::Slider::textBoxTextColourId,text);
+    setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
+    setColour(juce::Slider::textBoxBackgroundColourId,background);
+}
+juce::Font OrbitLook::font(float size) const { return juce::Font(juce::FontOptions(face).withHeight(size)); }
+void OrbitLook::drawLinearSlider(juce::Graphics& g,int x,int y,int width,int height,float position,float,float,juce::Slider::SliderStyle,juce::Slider&) {
+    const float mid=static_cast<float>(y)+static_cast<float>(height)*.5f;
+    g.setColour(line); g.fillRoundedRectangle(static_cast<float>(x),mid-1,static_cast<float>(width),2,1);
+    g.setColour(blue); g.fillRoundedRectangle(static_cast<float>(x),mid-1,position-static_cast<float>(x),2,1);
+    g.setColour(text); g.fillRoundedRectangle(position-3,mid-6,6,12,1);
+}
+
+InputScope::InputScope(orbit::ScopeQueue& q,OrbitLook& l):queue(q),look(l) { startTimerHz(30); }
+void InputScope::timerCallback() {
+    orbit::ScopeFrame frame;
+    bool changed=false;
+    while(queue.pop(frame)) { history[head]=frame; head=(head+1)%history.size(); changed=true; }
+    const auto now=juce::Time::getMillisecondCounterHiRes();
+    if(changed) { lastFrame=now; stale=false; repaint(); }
+    else if(!stale && now-lastFrame>1000) { history.fill({}); stale=true; repaint(); }
+}
+void InputScope::paint(juce::Graphics& g) {
+    g.fillAll(background);
+    g.setFont(look.font(11)); g.setColour(muted); g.drawText("INPUT",0,0,getWidth(),18,juce::Justification::left);
+    const float w=static_cast<float>(getWidth()),height=static_cast<float>(getHeight()-28),top=26;
+    bool clip=false;
+    for(int channel=0;channel<2;++channel) {
+        const float centre=top+height*(channel==0?.25f:.75f),amplitude=height*.21f;
+        g.setColour(line); g.drawHorizontalLine(static_cast<int>(centre),0,w);
+        g.setColour(channel==0?blue:cyan.withAlpha(.7f));
+        for(size_t i=0;i<history.size();++i) {
+            const auto& f=history[(head+i)%history.size()];
+            const float low=channel==0?f.minL:f.minR,high=channel==0?f.maxL:f.maxR;
+            clip=clip || low<=-1 || high>=1;
+            const float x=static_cast<float>(i)*w/static_cast<float>(history.size());
+            g.drawLine(x,centre-juce::jlimit(-1.0f,1.0f,high)*amplitude,x,centre-juce::jlimit(-1.0f,1.0f,low)*amplitude,1);
+        }
+    }
+    if(clip) { g.setColour(juce::Colour{0xfff29ab3}); g.fillEllipse(w-6,5,4,4); }
+}
+
+OrbitPad::OrbitPad(juce::AudioProcessorValueTreeState& s):state(s) {
+    setMouseCursor(juce::MouseCursor::CrosshairCursor);
+    setTitle("XY: density and pitch scatter");
+    setDescription("Use the Density and Pitch sliders for keyboard control.");
+}
+OrbitPad::~OrbitPad() { finish(); }
+void OrbitPad::finish() {
+    if(dragging) { state.getParameter("density")->endChangeGesture(); state.getParameter("pitch")->endChangeGesture(); dragging=false; }
+}
+void OrbitPad::mouseDown(const juce::MouseEvent& event) {
+    if(!event.mods.isLeftButtonDown()) return;
+    finish(); dragging=true;
+    state.getParameter("density")->beginChangeGesture(); state.getParameter("pitch")->beginChangeGesture(); move(event.position);
+}
+void OrbitPad::mouseDrag(const juce::MouseEvent& event) { if(dragging) move(event.position); }
+void OrbitPad::mouseUp(const juce::MouseEvent&) { finish(); }
+void OrbitPad::move(juce::Point<float> p) {
+    state.getParameter("density")->setValueNotifyingHost(juce::jlimit(0.0f,1.0f,(p.x/static_cast<float>(getWidth())-.2f)/.6f));
+    state.getParameter("pitch")->setValueNotifyingHost(juce::jlimit(0.0f,1.0f,(.8f-p.y/static_cast<float>(getHeight()))/.6f));
+    repaint();
+}
+void OrbitPad::paint(juce::Graphics& g) {
+    const float w=static_cast<float>(getWidth()),h=static_cast<float>(getHeight()),s=std::min(w,h),cx=w*.5f,cy=h*.5f;
+    const float x=(state.getRawParameterValue("density")->load()-10)/110,y=state.getRawParameterValue("pitch")->load()/12;
+    g.setColour(line); g.drawEllipse(cx-s*.414f,cy-s*.414f,s*.828f,s*.828f,.6f);
+    for(int i=0;i<80;++i) {
+        const float a=static_cast<float>(i)*orbit::pi/40,inner=s*(i%5==0?.425f:.431f),outer=s*.438f;
+        g.drawLine(cx+std::cos(a)*inner,cy+std::sin(a)*inner,cx+std::cos(a)*outer,cy+std::sin(a)*outer,.6f);
+    }
+    for(int ring=0;ring<58;++ring) {
+        const float t=static_cast<float>(ring)/57,phase=t*2*orbit::pi,radius=s*(.176f+.18f*t);
+        juce::Path curve;
+        for(int j=0;j<=160;++j) {
+            const float a=static_cast<float>(j)/160*2*orbit::pi;
+            const float wave=(std::sin(a*3+phase*1.7f+x*3)*.017f+std::sin(a*5-phase+y*4)*.011f)*s*(.5f+y);
+            const float twist=a+std::sin(phase+a*2)*(.04f+x*.08f);
+            const float px=cx+std::cos(twist)*(radius+wave)+std::sin(phase)*s*.012f;
+            const float py=cy+std::sin(twist)*(radius+wave)*(.95f+.03f*std::cos(phase));
+            if(j==0) curve.startNewSubPath(px,py); else curve.lineTo(px,py);
+        }
+        g.setColour((ring%6==0?cyan:blue).withAlpha(.18f+.38f*std::sin(t*orbit::pi)));
+        g.strokePath(curve,juce::PathStrokeType(.7f));
+    }
+    g.setColour(muted.withAlpha(.4f)); g.drawLine(cx-3,cy,cx+3,cy,.7f); g.drawLine(cx,cy-3,cx,cy+3,.7f);
+    const float hx=w*(.2f+x*.6f),hy=h*(.8f-y*.6f);
+    g.setColour(blue.withAlpha(.1f)); g.fillEllipse(hx-11,hy-11,22,22);
+    g.setColour(blue); g.fillEllipse(hx-5,hy-5,10,10);
+    g.setColour(text); g.drawEllipse(hx-5,hy-5,10,10,1.4f);
+}
+
+OrbitEditor::OrbitEditor(OrbitProcessor& p):AudioProcessorEditor(p),processor(p),scope(p.engine.scope,look),pad(p.state) {
+    setLookAndFeel(&look); setOpaque(true);
+    auto attach=[&](juce::Slider& slider,const char* id,const char* name,bool small=false) {
+        slider.setSliderStyle(juce::Slider::LinearHorizontal);
+        slider.setTextBoxStyle(small?juce::Slider::TextBoxRight:juce::Slider::NoTextBox,false,58,24);
+        slider.setTitle(name); slider.setName(name); slider.setNumDecimalPlacesToDisplay(2);
+        addAndMakeVisible(slider);
+        sliders.push_back(std::make_unique<SliderAttachment>(p.state,id,slider));
+    };
+    attach(density,"density","Density"); attach(grain,"grain","Grain size");
+    attach(pitch,"pitch","Pitch scatter"); attach(mix,"mix","Dry / Wet");
+    attach(jitter,"jitter","Trigger jitter",true); attach(spread,"spread","Stereo spread",true);
+    attach(lookback,"lookback","Lookback",true); attach(output,"output","Output gain",true); attach(seed,"seed","Random seed",true);
+    grain.setTextValueSuffix(" ms"); pitch.setTextValueSuffix(" st"); lookback.setTextValueSuffix(" ms"); output.setTextValueSuffix(" dB");
+    ir.addItemList({"8 ms","16 ms","24 ms","32 ms"},1);
+    strategy.addItemList({"Fixed","Cycle","Random","Weighted","Centroid"},1);
+    ir.setTitle("IR length"); strategy.setTitle("IR selection"); preset.setTitle("Preset");
+    preset.setTextWhenNothingSelected("Custom");
+    for(size_t i=0;i<presets.size();++i) preset.addItem(presets[i].name,static_cast<int>(i)+1);
+    for(auto* c:std::initializer_list<juce::Component*>{&scope,&pad,&preset,&ir,&strategy,&previous,&next,&details,&bypass}) addAndMakeVisible(c);
+    irAttachment=std::make_unique<ComboAttachment>(p.state,"ir",ir);
+    strategyAttachment=std::make_unique<ComboAttachment>(p.state,"strategy",strategy);
+    bypassAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"bypass",bypass);
+    preset.onChange=[this]{if(preset.getSelectedId()>0) applyPreset(preset.getSelectedId()-1);};
+    previous.onClick=[this]{applyPreset((std::max(0,preset.getSelectedId()-1)+4)%5);};
+    next.onClick=[this]{applyPreset(preset.getSelectedId()%5);};
+    details.onClick=[this]{setExpanded(!expanded);};
+    setResizable(true,true); setExpanded(false); setSize(1000,620);
+    syncPreset(); startTimerHz(30);
+}
+OrbitEditor::~OrbitEditor() { stopTimer(); setLookAndFeel(nullptr); }
+void OrbitEditor::setExpanded(bool open) {
+    expanded=open;
+    for(auto* c:std::initializer_list<juce::Component*>{&jitter,&spread,&lookback,&output,&seed,&ir,&strategy}) c->setVisible(open);
+    details.setButtonText(open?"Details -":"Details +");
+    const int height=open?820:620;
+    setResizeLimits(800,height*8/10,1600,height*16/10);
+    getConstrainer()->setFixedAspectRatio(1000.0/height);
+    if(getWidth()>0) setSize(getWidth(),getWidth()*height/1000);
+    resized(); repaint();
+}
+void OrbitEditor::applyPreset(int index) {
+    const auto& p=presets[static_cast<size_t>(juce::jlimit(0,4,index))];
+    const std::array<std::pair<const char*,float>,8> targets{{{"density",p.density},{"grain",p.grain},{"pitch",p.pitch},{"mix",p.mix},{"jitter",p.jitter},{"spread",p.spread},{"ir",static_cast<float>(p.ir)},{"strategy",static_cast<float>(p.strategy)}}};
+    for(const auto& target:targets) { auto* parameter=processor.state.getParameter(target.first); parameter->beginChangeGesture(); parameter->setValueNotifyingHost(parameter->convertTo0to1(target.second)); parameter->endChangeGesture(); }
+    syncPreset(); repaint(); pad.repaint();
+}
+void OrbitEditor::syncPreset() {
+    int selected=0;
+    auto matches=[&](const char* id,float v){return std::abs(processor.state.getRawParameterValue(id)->load()-v)<.002f;};
+    for(size_t i=0;i<presets.size();++i) {
+        const auto& p=presets[i];
+        if(matches("density",p.density)&&matches("grain",p.grain)&&matches("pitch",p.pitch)&&matches("mix",p.mix)&&matches("jitter",p.jitter)&&matches("spread",p.spread)&&matches("ir",static_cast<float>(p.ir))&&matches("strategy",static_cast<float>(p.strategy))) selected=static_cast<int>(i)+1;
+    }
+    preset.setSelectedId(selected,juce::dontSendNotification);
+}
+void OrbitEditor::timerCallback() {
+    bool changed=false;
+    for(size_t i=0;i<parameterIds.size();++i) {
+        const auto v=processor.state.getRawParameterValue(parameterIds[i])->load(std::memory_order_relaxed);
+        if(v!=previousValues[i]) { previousValues[i]=v; changed=true; }
+    }
+    if(changed) { syncPreset(); repaint(); pad.repaint(); }
+}
+void OrbitEditor::resized() {
+    const float s=static_cast<float>(getWidth())/1000;
+    auto place=[&](juce::Component& c,int x,int y,int w,int h){c.setBounds(juce::Rectangle<float>(static_cast<float>(x)*s,static_cast<float>(y)*s,static_cast<float>(w)*s,static_cast<float>(h)*s).toNearestInt());};
+    place(preset,390,28,220,32); place(previous,344,28,30,32); place(next,626,28,30,32); place(bypass,865,28,95,32);
+    place(scope,45,116,210,106); place(pad,288,99,420,388);
+    place(density,40,330,220,26); place(grain,40,416,220,26);
+    place(pitch,735,245,220,26); place(mix,735,416,220,26);
+    place(details,40,515,100,28);
+    place(jitter,40,610,265,30); place(spread,40,688,265,30);
+    place(lookback,368,610,265,30); place(output,368,688,265,30);
+    place(ir,690,604,100,32); place(strategy,808,604,150,32); place(seed,690,688,268,30);
+}
+void OrbitEditor::paint(juce::Graphics& graphics) {
+    graphics.fillAll(background);
+    auto& g=graphics; g.addTransform(juce::AffineTransform::scale(static_cast<float>(getWidth())/1000));
+    auto label=[&](const juce::String& str,float x,float y,float w,float h,float size,juce::Colour colour=text,juce::Justification align=juce::Justification::left){g.setFont(look.font(size));g.setColour(colour);g.drawText(str,juce::Rectangle<float>(x,y,w,h),align);};
+    g.setColour(blue); g.drawEllipse(45,33,21,21,1.4f);g.drawEllipse(49,37,13,13,1);
+    label("O R B I T",82,25,225,38,26);
+    g.setColour(line);g.drawHorizontalLine(82,40,960);g.drawHorizontalLine(497,40,960);
+    label("DENSITY",45,259,180,20,11,muted); label("X",239,259,16,20,10,muted);
+    label(juce::String(density.getValue(),0),45,280,95,48,44);label("grains/s",142,300,75,20,11,muted);
+    label("GRAIN SIZE",45,383,125,20,11,muted);label(juce::String(grain.getValue(),1)+" ms",170,383,85,20,11,muted,juce::Justification::right);
+    label("PITCH SCATTER",740,172,180,20,11,muted);label("Y",939,172,16,20,10,muted);
+    label("+/-",740,207,36,25,16,blue);label(juce::String(pitch.getValue(),1),779,191,132,50,42);label("st",916,215,35,20,11,muted);
+    juce::Path arc;arc.addCentredArc(781,353,38,38,0,orbit::pi*1.25f,orbit::pi*(1.25f+1.5f*static_cast<float>(mix.getValue())),true);
+    g.setColour(line);g.drawEllipse(743,315,76,76,2);g.setColour(blue);g.strokePath(arc,juce::PathStrokeType(2));
+    label(juce::String(mix.getValue()*100,0),751,332,60,34,29,text,juce::Justification::centred);label("%",774,367,20,12,9,muted,juce::Justification::centred);
+    label("DRY / WET",840,341,116,24,11,muted);
+    label("VST3",916,561,44,20,10,muted,juce::Justification::right);
+    if(expanded) {
+        g.setColour(line);g.drawHorizontalLine(578,40,960);
+        label("JITTER",45,588,220,18,10,muted);label("SPREAD",45,666,220,18,10,muted);
+        label("LOOKBACK",373,588,220,18,10,muted);label("OUTPUT",373,666,220,18,10,muted);
+        label("IR",690,580,100,18,10,muted);label("SELECTION",808,580,150,18,10,muted);label("SEED",695,666,250,18,10,muted);
+    }
+}

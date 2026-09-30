@@ -2,6 +2,19 @@
 
 A Python-based granular synthesizer that fuses **granular synthesis** with **time-varying convolution** using very short impulse responses (IRs). Timbre evolves at the grain rate without smearing attacks, enabling everything from evolving pads to percussive micro-rooms.
 
+## ORBIT Windows VST3
+
+The native C++/JUCE effect lives in [plugin/](plugin/README.md): live input,
+per-grain convolution, parameter automation, session state, and a minimal ice-blue
+interface with a live stereo input scope. The first native version implements
+Standard mode; experimental A/B modes remain in the Python application.
+See the plugin README for build, installation and dependency license details.
+The **ORBIT Windows VST3** GitHub Actions workflow builds and validates Windows x64
+artifacts. DAW-specific session testing remains a release requirement.
+
+The lightweight offline web interface can be started with
+`python -m src.app.web --port 56628`. Open the printed local address.
+
 ## How It Works
 
 ```
@@ -90,8 +103,8 @@ The default cold render measured 212.0 → 64.1 ms. Memory was measured in separ
 FIRs and input preparation. Full measurements, environment and other variants are in
 [benchmark-windows.json](docs/benchmark-windows.json). Performance varies by machine.
 
-This is still an **offline Python renderer**, not a real-time callback or a VST.
-The planned Windows VST3 architecture and validation requirements are described in
+These measurements describe the **offline Python renderer**, not the native VST3.
+The Windows VST3 architecture and validation requirements are described in
 [the VST3 migration plan](docs/vst3-roadmap.md).
 
 ### Audio behavior fixes
@@ -159,4 +172,5 @@ src/app/
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+Original code: MIT — see [LICENSE](LICENSE). Native plugin builds also include
+JUCE (AGPLv3 or commercial license) and Oxanium (SIL OFL); see [plugin licensing](plugin/README.md#licenses).
