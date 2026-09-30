@@ -19,13 +19,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout OrbitProcessor::createParame
     p.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"strategy",1},"IR selection",juce::StringArray{"Fixed","Cycle","Random","Weighted","Centroid"},3));
     p.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"seed",1},"Random seed",0,65535,2025));
     p.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"bypass",1},"Bypass",false));
+    add("reverb","Reverb",0,1,.001f,0);
     return p;
 }
 OrbitProcessor::OrbitProcessor()
     : AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true)
                                     .withOutput("Output",juce::AudioChannelSet::stereo(),true)),
       state(*this,nullptr,"ORBIT_STATE",createParameters()) {
-    const char* ids[]{"density","grain","pitch","mix","jitter","spread","lookback","output","ir","strategy","seed","bypass"};
+    const char* ids[]{"density","grain","pitch","mix","jitter","spread","lookback","output","ir","strategy","seed","bypass","reverb"};
     for(size_t i=0;i<values.size();++i) values[i]=state.getRawParameterValue(ids[i]);
 }
 void OrbitProcessor::prepareToPlay(double rate,int maximumBlock) {
@@ -47,6 +48,7 @@ void OrbitProcessor::process(juce::AudioBuffer<float>& buffer,bool hostBypassed)
     p.jitter=v(jitter); p.spread=v(spread); p.lookbackMs=v(lookback); p.outputDb=v(output);
     p.irLength=juce::roundToInt(v(ir)); p.strategy=juce::roundToInt(v(strategy));
     p.seed=static_cast<uint32_t>(v(seed)); p.bypass=hostBypassed || v(bypass)>.5f;
+    p.reverb=v(reverb);
     for(int c=getTotalNumInputChannels();c<buffer.getNumChannels();++c) buffer.clear(c,0,buffer.getNumSamples());
     if(buffer.getNumChannels()==0) return;
     if(buffer.getNumChannels()>1) engine.process(buffer.getWritePointer(0),buffer.getWritePointer(1),buffer.getNumSamples(),p);
@@ -67,11 +69,18 @@ void OrbitProcessor::processBlockBypassed(juce::AudioBuffer<float>& b,juce::Midi
 juce::AudioProcessorParameter* OrbitProcessor::getBypassParameter() const { return state.getParameter("bypass"); }
 juce::AudioProcessorEditor* OrbitProcessor::createEditor() { return new OrbitEditor(*this); }
 void OrbitProcessor::getStateInformation(juce::MemoryBlock& data) {
-    auto tree=state.copyState(); tree.setProperty("schemaVersion",1,nullptr);
+    auto tree=state.copyState(); tree.setProperty("schemaVersion",2,nullptr);
     if(auto xml=tree.createXml()) copyXmlToBinary(*xml,data);
 }
 void OrbitProcessor::setStateInformation(const void* data,int size) {
     if(auto xml=getXmlFromBinary(data,size))
-        if(xml->hasTagName(state.state.getType())) state.replaceState(juce::ValueTree::fromXml(*xml));
+        if(xml->hasTagName(state.state.getType())) {
+            auto restored=juce::ValueTree::fromXml(*xml);
+            if(!restored.getChildWithProperty("id","reverb").isValid()) {
+                juce::ValueTree parameter("PARAM");parameter.setProperty("id","reverb",nullptr);parameter.setProperty("value",0.0f,nullptr);
+                restored.addChild(parameter,-1,nullptr);
+            }
+            state.replaceState(restored);
+        }
 }
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new OrbitProcessor(); }

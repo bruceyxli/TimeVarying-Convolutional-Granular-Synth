@@ -9,11 +9,15 @@ int main(int argc,char** argv) {
         OrbitProcessor processor;
         auto* density=processor.state.getParameter("density");
         density->setValueNotifyingHost(density->convertTo0to1(117));
+        auto* reverb=processor.state.getParameter("reverb");
+        reverb->setValueNotifyingHost(.72f);
         juce::MemoryBlock saved;
         processor.getStateInformation(saved);
         density->setValueNotifyingHost(0);
+        reverb->setValueNotifyingHost(0);
         processor.setStateInformation(saved.getData(),static_cast<int>(saved.getSize()));
         require(processor.state.getRawParameterValue("density")->load()==117,"State roundtrip");
+        require(std::abs(processor.state.getRawParameterValue("reverb")->load()-.72f)<.001f,"Reverb state roundtrip");
         processor.setStateInformation("invalid",7);
         require(processor.state.getRawParameterValue("density")->load()==117,"Invalid state changed parameters");
 
@@ -30,6 +34,7 @@ int main(int argc,char** argv) {
         for(int i=0;i<audio.getNumSamples();++i) require(audio.getSample(0,i)==.1f,"Oversized mono block / bypass");
         processor.getBypassParameter()->setValueNotifyingHost(0);
         density->setValueNotifyingHost(density->convertTo0to1(80));
+        reverb->setValueNotifyingHost(0);
         {
             std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
             require(editor && editor->getWidth()>0,"Editor creation");
@@ -44,8 +49,16 @@ int main(int argc,char** argv) {
             }
         }
         {
+            reverb->setValueNotifyingHost(.8f);
             std::unique_ptr<juce::AudioProcessorEditor> reopened(processor.createEditor());
             require(reopened!=nullptr,"Editor reopen");
+            if(argc>1) {
+                const juce::File original(juce::String::fromUTF8(argv[1]));
+                const auto wet=original.getSiblingFile(original.getFileNameWithoutExtension()+"-reverb.png");
+                wet.deleteFile();auto stream=wet.createOutputStream();
+                require(stream!=nullptr,"Reverb screenshot output");
+                require(juce::PNGImageFormat().writeImageToStream(reopened->createComponentSnapshot(reopened->getLocalBounds(),true),*stream),"Reverb screenshot encoding");
+            }
         }
         processor.releaseResources();
         std::cout<<"PASS: state restore, invalid state, oversized mono block, bypass, native editor paint/reopen\n";

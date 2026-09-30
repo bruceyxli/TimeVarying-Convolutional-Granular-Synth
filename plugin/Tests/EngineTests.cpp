@@ -106,7 +106,7 @@ void testRatesAndAutomation() {
     for(double sr:{44100.0,96000.0,192000.0}) {
         orbit::Engine engine;engine.prepare(sr);
         auto audio=input(static_cast<int>(sr/2),sr);
-        orbit::Parameters p;p.density=120;p.grainMs=50;p.pitch=12;p.irLength=3;
+        orbit::Parameters p;p.density=120;p.grainMs=50;p.pitch=12;p.irLength=3;p.reverb=1;
         run(engine,audio,p,{64,1024,1});
         for(const auto& c:audio)for(float sample:c)require(std::isfinite(sample)&&std::abs(sample)<=1,"Rate extremes remain finite and bounded");
         require(engine.droppedGrains()==0,"Supported range must fit voice pool");
@@ -116,12 +116,30 @@ void testRatesAndAutomation() {
     orbit::Parameters p;
     for(int offset=0;offset<24000;offset+=64) {
         p.pitch=(offset%128)?0.0f:12.0f;p.mix=(offset%128)?0.0f:1.0f;p.irLength=(offset/64)%4;
+        p.reverb=(offset%128)?0.0f:1.0f;
         trackAllocations=true;e.process(audio[0].data()+offset,audio[1].data()+offset,std::min(64,24000-offset),p);trackAllocations=false;
     }
     for(const auto& c:audio)for(float sample:c)require(std::isfinite(sample),"Automation must remain finite");
 }
+void testReverb(orbit::Engine& engine) {
+    orbit::Parameters p;p.mix=0;p.outputDb=0;p.reverb=1;
+    Stereo impulse;for(auto& c:impulse)c.assign(144000,0);impulse[0][0]=.4f;
+    auto split=impulse;
+    engine.reset();run(engine,impulse,p,{144000});
+    engine.reset();run(engine,split,p,{1,32,128,509});
+    require(impulse==split,"Reverb block invariance");
+    float tail=0,end=0,right=0;
+    for(size_t i=1000;i<24000;++i) {tail+=std::abs(impulse[0][i]);right+=std::abs(impulse[1][i]);}
+    for(size_t i=120000;i<144000;++i)end+=std::abs(impulse[0][i]);
+    require(tail>.01f && right>.001f,"Reverb must create a real stereo tail");
+    require(end<tail*.001f,"Reverb tail must decay");
+    engine.reset();p.reverb=0;auto dry=input(48000,48000),original=dry;run(engine,dry,p,{64});
+    require(dry==original,"Reverb zero must preserve the dry path exactly");
+    p.reverb=1;run(engine,dry,p,{64});p.bypass=true;dry=original;run(engine,dry,p,{64});
+    for(size_t i=47000;i<48000;++i)require(dry[0][i]==original[0][i],"Reverb must settle to unity on bypass");
+}
 void benchmark(orbit::Engine& engine) {
-    orbit::Parameters p;p.density=120;p.grainMs=50;p.irLength=3;p.pitch=12;p.strategy=4;
+    orbit::Parameters p;p.density=120;p.grainMs=50;p.irLength=3;p.pitch=12;p.strategy=4;p.reverb=1;
     constexpr int block=64,iterations=3000;
     auto audio=input(block*iterations,48000);
     std::vector<double> times;times.reserve(iterations);
@@ -140,6 +158,7 @@ int main() {
         testFFT();
         orbit::Engine engine;engine.prepare(48000);
         testBlockInvariance(engine);testBypassAndSilence(engine);testStereoAndScope(engine);testRatesAndAutomation();
+        testReverb(engine);
         require(audioAllocations==0,"process() performed heap allocations");
         benchmark(engine);
         std::cout<<"PASS: FFT, five selectors, block invariance, bypass, silence, stereo polarity, scope queue, 44.1/48/96/192 kHz, automation; audio allocations="<<audioAllocations<<"\n";

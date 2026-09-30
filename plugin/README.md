@@ -25,10 +25,18 @@ both the native UI and the host bypass parameter transition to dry unity.
   keyboard-accessible alternatives; all controls notify the DAW for automation.
 - Grain size: 5–50 ms; density: 10–120 grains/s; pitch: random ±0–12 semitones.
 - Dry / Wet crossfades direct input with processed grains. There is no Render button.
+- Reverb adds a damped stereo room after the granular mix. Its dedicated compact
+  dial colours the halo: zero is white without glow, increasing amounts blend
+  toward ice blue with a soft halo. Bypass shows white. Density controls line count,
+  Grain Size the ring width, Pitch its deformation and Dry/Wet its definition.
+- Main faders have etched divisions and larger caps; Shift-drag adjusts precisely,
+  double-click restores the parameter default, and wheel scrolling leaves values alone.
 - Details: trigger jitter, stereo spread, source lookback (0–200 ms), output gain,
   IR length (8/16/24/32 ms), five IR-selection strategies and a saved random seed.
 - Five factory presets are starting points. Modified settings show Custom.
 - Session state persists all parameters. Closing the editor does not stop processing.
+- Existing 0.2 sessions load with Reverb off. The new parameter is appended without
+  changing existing IDs/order. The host tail allowance is now 3 seconds.
 
 ## First native release scope
 

@@ -4,6 +4,7 @@
 #include <complex>
 #include <cstdint>
 #include <vector>
+#include "OrbitReverb.h"
 
 namespace orbit {
 constexpr float pi = 3.14159265358979323846f;
@@ -15,6 +16,7 @@ struct Parameters {
     int strategy = 3; // fixed, cycle, random, weighted, centroid
     uint32_t seed = 2025;
     bool bypass = false;
+    float reverb = 0;
 };
 
 struct ScopeFrame { float minL=0, maxL=0, minR=0, maxR=0; };
@@ -73,6 +75,8 @@ private:
     ScopeFrame scopeFrame{};
     float mix = .65f, gain = .7079458f, smoothing = .001f;
     bool initialParameters = true;
+    RoomReverb room;
+    float reverbAmount=0;
     uint64_t dropped = 0;
     float random() noexcept;
     float readSample(const std::vector<float>& history, double position, int rate) const noexcept;

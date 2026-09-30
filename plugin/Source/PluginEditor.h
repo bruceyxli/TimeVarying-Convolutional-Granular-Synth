@@ -9,6 +9,7 @@ struct OrbitLook : juce::LookAndFeel_V4 {
     juce::Font getTextButtonFont(juce::TextButton&,int) override { return font(12); }
     juce::Font getLabelFont(juce::Label&) override { return font(12); }
     void drawLinearSlider(juce::Graphics&,int,int,int,int,float,float,float,juce::Slider::SliderStyle,juce::Slider&) override;
+    void drawRotarySlider(juce::Graphics&,int,int,int,int,float,float,float,juce::Slider&) override;
 };
 
 class InputScope final : public juce::Component, private juce::Timer {
@@ -33,9 +34,12 @@ public:
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
+    void updateVisuals();
 private:
     juce::AudioProcessorValueTreeState& state;
     bool dragging=false;
+    std::array<float,5> visual{};
+    std::array<float,5> targets() const;
     void move(juce::Point<float>);
     void finish();
 };
@@ -51,7 +55,7 @@ private:
     OrbitLook look;
     InputScope scope;
     OrbitPad pad;
-    juce::Slider density,grain,pitch,mix,jitter,spread,lookback,output,seed;
+    juce::Slider density,grain,pitch,mix,jitter,spread,lookback,output,seed,reverb;
     juce::ComboBox preset,ir,strategy;
     juce::TextButton previous{"<"},next{">"},details{"Details +"};
     juce::ToggleButton bypass{"Bypass"};
@@ -60,7 +64,7 @@ private:
     std::vector<std::unique_ptr<SliderAttachment>> sliders;
     std::unique_ptr<ComboAttachment> irAttachment,strategyAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
-    std::array<float,12> previousValues{};
+    std::array<float,13> previousValues{};
     bool expanded=false;
     void timerCallback() override;
     void applyPreset(int);

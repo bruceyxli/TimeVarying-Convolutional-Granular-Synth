@@ -15,7 +15,7 @@ public:
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return .4; }
+    double getTailLengthSeconds() const override { return 3.0; }
     bool hasEditor() const override { return true; }
     juce::AudioProcessorEditor* createEditor() override;
     void getStateInformation(juce::MemoryBlock&) override;
@@ -30,7 +30,7 @@ public:
     juce::AudioProcessorValueTreeState state;
     orbit::Engine engine;
 private:
-    enum Index { density, grain, pitch, mix, jitter, spread, lookback, output, ir, strategy, seed, bypass, count };
+    enum Index { density, grain, pitch, mix, jitter, spread, lookback, output, ir, strategy, seed, bypass, reverb, count };
     std::array<std::atomic<float>*, count> values{};
     juce::AudioBuffer<float> monoScratch;
     void process(juce::AudioBuffer<float>&, bool bypassed);

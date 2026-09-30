@@ -135,6 +135,7 @@ void Engine::prepare(double sampleRate) {
     }
     scopeStride=std::max(1,static_cast<int>(sr/256));
     smoothing=1.0f-std::exp(-1.0f/static_cast<float>(sr*.02));
+    room.prepare(sr);
     reset();
 }
 void Engine::reset() noexcept {
@@ -142,6 +143,7 @@ void Engine::reset() noexcept {
     for(auto& v:voices) v.length=v.position=0;
     historyHead=0; nextTrigger=0; rng=lastSeed=2025; cycle=0; dropped=0;
     scopeCount=0; scopeFrame={}; initialParameters=true;
+    room.reset(); reverbAmount=0;
 }
 float Engine::readSample(const std::vector<float>& history,double position,int rate) const noexcept {
     const int base=static_cast<int>(std::floor(position));
@@ -234,7 +236,8 @@ void Engine::process(float* left,float* right,int samples,const Parameters& para
     p.lookbackMs=std::clamp(finite(p.lookbackMs/100)*100,0.0f,200.0f);
     const float targetMix=p.bypass?0:std::clamp(finite(p.mix),0.0f,1.0f);
     const float targetGain=p.bypass?1:std::pow(10.0f,std::clamp(finite(p.outputDb/10)*10,-24.0f,6.0f)/20);
-    if(initialParameters) { mix=targetMix; gain=targetGain; initialParameters=false; }
+    const float targetReverb=p.bypass?0:std::clamp(finite(p.reverb),0.0f,1.0f);
+    if(initialParameters) { mix=targetMix; gain=targetGain; reverbAmount=targetReverb; initialParameters=false; }
     if(p.seed!=lastSeed) { rng=p.seed==0?1:p.seed; lastSeed=p.seed; cycle=0; }
     for(int i=0;i<samples;++i) {
         const float inL=finite(left[i]),inR=finite(right[i]);
@@ -257,8 +260,12 @@ void Engine::process(float* left,float* right,int samples,const Parameters& para
         mix+=(targetMix-mix)*smoothing; gain+=(targetGain-gain)*smoothing;
         if(std::abs(targetMix-mix)<1e-5f) mix=targetMix;
         if(std::abs(targetGain-gain)<1e-4f) gain=targetGain;
-        if(p.bypass && mix<1e-6f && std::abs(gain-1)<1e-5f) { left[i]=inL; right[i]=inR; }
-        else { left[i]=ceiling((inL*(1-mix)+wetL*mix)*gain); right[i]=ceiling((inR*(1-mix)+wetR*mix)*gain); }
+        reverbAmount+=(targetReverb-reverbAmount)*smoothing;
+        if(std::abs(targetReverb-reverbAmount)<1e-5f) reverbAmount=targetReverb;
+        float outL=inL*(1-mix)+wetL*mix,outR=inR*(1-mix)+wetR*mix;
+        room.process(outL,outR,reverbAmount);
+        if(p.bypass && mix<1e-6f && reverbAmount==0 && std::abs(gain-1)<1e-5f) { left[i]=inL; right[i]=inR; }
+        else { left[i]=ceiling(outL*gain); right[i]=ceiling(outR*gain); }
     }
 }
 } // namespace orbit
