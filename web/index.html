@@ -35,11 +35,11 @@
         <div class="parameter main-parameter">
           <div class="parameter-heading"><label for="density">DENSITY</label><span class="axis">X</span></div>
           <div class="large-value"><output id="density-value" for="density">80</output><span>grains/s</span></div>
-          <input id="density" type="range" min="10" max="120" step="1" value="80">
+          <input id="density" class="main-fader" type="range" min="10" max="120" step="1" value="80">
         </div>
         <div class="parameter secondary-parameter">
           <div class="parameter-heading"><label for="grain">GRAIN SIZE</label><span><output id="grain-value" for="grain">15</output> ms</span></div>
-          <input id="grain" type="range" min="5" max="50" step="1" value="15">
+          <input id="grain" class="main-fader" type="range" min="5" max="50" step="0.1" value="15">
         </div>
       </aside>
 
@@ -48,19 +48,23 @@
           <canvas id="orbit-art" aria-hidden="true"></canvas>
           <span id="xy-handle" class="xy-handle" aria-hidden="true"></span>
         </div>
+        <div class="reverb-control">
+          <div class="reverb-knob" id="reverb-knob"><span class="knob-pointer"></span><input id="reverb" type="range" min="0" max="1" step="0.001" value="0" aria-label="Reverb" title="Drag to adjust · Shift for precision · Double-click to reset"></div>
+          <label for="reverb">REVERB<output id="reverb-value">OFF</output></label>
+        </div>
       </section>
 
       <aside class="control-column right-column">
         <div class="parameter main-parameter">
           <div class="parameter-heading"><label for="pitch">PITCH SCATTER</label><span class="axis">Y</span></div>
           <div class="large-value"><span class="plusminus">±</span><output id="pitch-value" for="pitch">5</output><span>st</span></div>
-          <input id="pitch" type="range" min="0" max="12" step="1" value="5">
+          <input id="pitch" class="main-fader" type="range" min="0" max="12" step="0.1" value="5">
         </div>
         <div class="mix-section">
           <div class="mix-dial" id="mix-dial" aria-hidden="true"><div><span id="wet-dial-value">65</span><small>%</small></div></div>
           <div class="mix-description"><label for="wet">DRY / WET</label></div>
         </div>
-        <input id="wet" type="range" min="0" max="1" step="0.01" value="0.65" aria-label="Dry wet mix">
+        <input id="wet" class="main-fader" type="range" min="0" max="1" step="0.001" value="0.65" aria-label="Dry wet mix">
       </aside>
     </section>
 

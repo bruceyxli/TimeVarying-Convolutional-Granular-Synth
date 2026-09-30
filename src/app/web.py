@@ -23,6 +23,7 @@ from src.app.audio_io import decode_audio
 from src.app.engine import GranularConfig, render_offline
 from src.app.ir_bank import generate_demo_ir_bank
 from src.app.presets import PRESETS
+from src.app.reverb import apply_reverb
 
 WEB_ROOT = Path(__file__).resolve().parents[2] / "web"
 MAX_UPLOAD = 24 * 1024 * 1024
@@ -81,6 +82,9 @@ def render_request(server, data):
         raise ValueError("Unknown render settings")
     cfg = GranularConfig(**settings)
     cfg.validate()
+    reverb = data.get("reverb", 0)
+    if not isinstance(reverb, (int, float)) or not np.isfinite(reverb) or not 0 <= reverb <= 1:
+        raise ValueError("Reverb must be between 0 and 1")
     if not 2 <= cfg.duration_sec <= 40 or cfg.density_hz > 120 or cfg.grain_ms > 50:
         raise ValueError("Web renders support 2–40 seconds, up to 120 grains/s and 50 ms grains")
     if cfg.sample_rate not in (44100, 48000) or cfg.long_ir_ms > 300:
@@ -97,6 +101,9 @@ def render_request(server, data):
     weights = np.linspace(1, 2, len(bank)) if cfg.ir_strategy == "weighted" else None
     start = perf_counter()
     audio = render_offline(source, bank, cfg, weights)
+    audio = apply_reverb(audio, cfg.sample_rate, reverb)
+    if reverb > 0:
+        audio /= max(1.0, float(np.max(np.abs(audio))))
     elapsed = perf_counter() - start
     buffer = io.BytesIO()
     sf.write(buffer, audio, cfg.sample_rate, format="WAV", subtype="PCM_24")
