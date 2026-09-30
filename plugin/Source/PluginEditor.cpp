@@ -361,7 +361,7 @@ void OrbitEditor::timerCallback() {
 void OrbitEditor::resized() {
     const float s=static_cast<float>(getWidth())/1000;
     auto place=[&](juce::Component& c,int x,int y,int w,int h){c.setBounds(juce::Rectangle<float>(static_cast<float>(x)*s,static_cast<float>(y)*s,static_cast<float>(w)*s,static_cast<float>(h)*s).toNearestInt());};
-    place(preset,390,28,220,32); place(previous,344,28,30,32); place(next,626,28,30,32); place(bypass,865,28,95,32);
+    place(preset,390,28,220,32); place(previous,344,28,30,32); place(next,626,28,30,32); place(bypass,755,28,95,32);
     place(savePreset,675,28,60,32);place(savePanel,320,92,360,160);
     const float panelScale=static_cast<float>(savePanel.getWidth())/360;
     auto inPanel=[&](juce::Component& c,int x,int y,int w,int h){c.setBounds(juce::roundToInt(x*panelScale),juce::roundToInt(y*panelScale),juce::roundToInt(w*panelScale),juce::roundToInt(h*panelScale));};
@@ -370,12 +370,12 @@ void OrbitEditor::resized() {
     place(scope,45,116,210,106); place(pad,288,99,420,388);
     place(density,40,330,220,26); place(grain,40,416,220,26);
     place(pitch,735,245,220,26); place(mix,735,416,220,26);
-    place(details,40,515,100,28);
+    place(details,865,28,95,32);
     place(reverb,445,503,58,58);
     place(jitter,40,265,265,30); place(spread,40,356,265,30);place(seed,40,447,265,30);
     place(lookback,368,447,265,30); place(output,690,265,268,30);
     place(ir,368,268,245,32); place(strategy,368,356,245,32);
-    if(expanded) {place(details,40,112,90,28);place(reverb,690,340,58,58);}
+    if(expanded) place(reverb,690,340,58,58);
 }
 void OrbitEditor::paint(juce::Graphics& graphics) {
     graphics.fillAll(background);
@@ -385,7 +385,7 @@ void OrbitEditor::paint(juce::Graphics& graphics) {
     label("O R B I T",82,25,225,38,26);
     g.setColour(line);g.drawHorizontalLine(82,40,960);
     if(expanded) {
-        label("DETAILS",155,108,220,36,26);
+        label("DETAILS",45,108,220,36,26);
         label("GRAIN MOTION",45,193,240,20,11,blue);
         label("CONVOLUTION",373,193,240,20,11,blue);
         label("SPACE / OUTPUT",695,193,260,20,11,blue);
