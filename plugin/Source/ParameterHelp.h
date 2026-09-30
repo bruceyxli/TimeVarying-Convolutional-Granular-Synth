@@ -2,21 +2,20 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 inline juce::String orbitParameterHelp(const juce::String& id) {
-    if(id=="density")return juce::String::fromUTF8(u8"Density \u00b7 \u9897\u7c92\u5bc6\u5ea6\n\u6bcf\u79d2\u89e6\u53d1\u7684\u9897\u7c92\u6570\u3002\u8d8a\u9ad8\u8d8a\u5bc6\u96c6\uff0c\u8d8a\u4f4e\u8d8a\u7a00\u758f\u3002");
-    if(id=="grain")return juce::String::fromUTF8(u8"Grain size \u00b7 \u9897\u7c92\u65f6\u957f\n\u6bcf\u4e2a\u9897\u7c92\u6301\u7eed\u7684\u65f6\u95f4\u3002\u8f83\u77ed\u66f4\u7ec6\u788e\uff0c\u8f83\u957f\u4fdd\u7559\u66f4\u591a\u539f\u58f0\u7ec6\u8282\u3002");
-    if(id=="pitch")return juce::String::fromUTF8(u8"Pitch scatter \u00b7 \u97f3\u9ad8\u6563\u5e03\n\u6bcf\u4e2a\u9897\u7c92\u968f\u673a\u5347\u964d\u97f3\u9ad8\u7684\u8303\u56f4\uff0c\u4ee5\u534a\u97f3\u8ba1\u30020 \u4fdd\u6301\u539f\u97f3\u9ad8\u3002");
-    if(id=="mix")return juce::String::fromUTF8(u8"Dry / Wet \u00b7 \u5e72\u6e7f\u6bd4\n\u6df7\u5408\u539f\u59cb\u8f93\u5165\u4e0e\u9897\u7c92\u6548\u679c\u30020% \u4e3a\u539f\u58f0\uff0c100% \u4e3a\u9897\u7c92\u58f0\uff1bReverb \u5728\u6df7\u5408\u540e\u52a0\u5165\u3002");
-    if(id=="reverb")return juce::String::fromUTF8(u8"Reverb \u00b7 \u6df7\u54cd\n\u589e\u52a0\u7a7a\u95f4\u611f\u4e0e\u5c3e\u97f3\u30020 \u5173\u95ed\u6df7\u54cd\uff0c\u5149\u73af\u4e3a\u767d\u8272\uff1b\u589e\u5927\u540e\u5149\u73af\u53d8\u84dd\u3001\u5149\u6655\u589e\u5f3a\u3002");
-    if(id=="jitter")return juce::String::fromUTF8(u8"Jitter \u00b7 \u89e6\u53d1\u6296\u52a8\n\u968f\u673a\u504f\u79fb\u9897\u7c92\u89e6\u53d1\u65f6\u95f4\u30020 \u66f4\u89c4\u5f8b\uff0c\u589e\u5927\u540e\u8282\u594f\u66f4\u677e\u6563\u3002");
-    if(id=="spread")return juce::String::fromUTF8(u8"Spread \u00b7 \u7acb\u4f53\u58f0\u6563\u5e03\n\u9897\u7c92\u5728\u5de6\u53f3\u58f0\u9053\u95f4\u968f\u673a\u5206\u5e03\u7684\u5bbd\u5ea6\u30020 \u5c45\u4e2d\uff0c\u589e\u5927\u540e\u66f4\u5bbd\u3002");
-    if(id=="lookback")return juce::String::fromUTF8(u8"Lookback \u00b7 \u56de\u770b\u65f6\u95f4\n\u5411\u66f4\u65e9\u7684\u8f93\u5165\u5386\u53f2\u53d6\u6837\u3002\u589e\u5927\u540e\u9897\u7c92\u4f7f\u7528\u66f4\u65e9\u7684\u58f0\u97f3\u7247\u6bb5\u3002");
-    if(id=="output")return juce::String::fromUTF8(u8"Output \u00b7 \u8f93\u51fa\u589e\u76ca\n\u8c03\u6574\u6548\u679c\u5904\u7406\u540e\u7684\u6574\u4f53\u97f3\u91cf\uff0c\u5355\u4f4d\u4e3a dB\u3002");
-    if(id=="ir")return juce::String::fromUTF8(u8"IR \u00b7 \u8109\u51b2\u54cd\u5e94\u957f\u5ea6\n\u63a7\u5236\u6bcf\u9897\u7c92\u5377\u79ef\u7684\u77ed\u54cd\u5e94\u65f6\u957f\u3002\u8f83\u77ed\u66f4\u7d27\u51d1\uff0c\u8f83\u957f\u5e26\u6765\u66f4\u591a\u5171\u9e23\u3002");
-    if(id=="strategy")return juce::String::fromUTF8(u8"Selection \u00b7 IR \u9009\u62e9\n\u9009\u62e9\u6bcf\u4e2a\u9897\u7c92\u7684\u54cd\u5e94\uff1a\u56fa\u5b9a\u3001\u8f6e\u6362\u3001\u968f\u673a\u3001\u52a0\u6743\uff0c\u6216\u6309\u9891\u8c31\u91cd\u5fc3\u5339\u914d\u3002");
-    if(id=="seed")return juce::String::fromUTF8(u8"Seed \u00b7 \u968f\u673a\u79cd\u5b50\n\u6539\u53d8\u968f\u673a\u53d8\u5316\u7684\u5e8f\u5217\u3002\u76f8\u540c\u8f93\u5165\u3001\u79cd\u5b50\u4e0e\u8d77\u59cb\u72b6\u6001\u53ef\u590d\u73b0\u76f8\u540c\u53d8\u5316\u3002");
-    if(id=="bypass")return juce::String::fromUTF8(u8"Bypass \u00b7 \u65c1\u901a\n\u8df3\u8fc7\u9897\u7c92\u3001\u6df7\u54cd\u548c\u8f93\u51fa\u589e\u76ca\uff0c\u8f93\u51fa\u539f\u59cb\u8f93\u5165\u3002");
-    if(id=="xy")return juce::String::fromUTF8(u8"XY \u00b7 \u58f0\u97f3\u63a7\u5236\n\u5de6\u53f3\u6539\u53d8\u9897\u7c92\u5bc6\u5ea6\uff0c\u4e0a\u4e0b\u6539\u53d8\u97f3\u9ad8\u6563\u5e03\u3002\u4e5f\u53ef\u4f7f\u7528\u4e24\u4fa7\u63a8\u5b50\u8c03\u6574\u3002");
-    if(id=="input")return juce::String::fromUTF8(u8"Input \u00b7 \u5b9e\u65f6\u8f93\u5165\n\u663e\u793a\u5bbf\u4e3b\u9001\u5165\u63d2\u4ef6\u7684\u5de6\u53f3\u58f0\u9053\u6ce2\u5f62\uff1b\u7ea2\u8272\u6307\u793a\u8868\u793a\u8f93\u5165\u5cf0\u503c\u8fbe\u5230\u6ee1\u523b\u5ea6\u3002");
+    if(id=="density")return "Density\nGrains triggered per second. Higher values create a denser texture; lower values leave more space.";
+    if(id=="grain")return "Grain Size\nThe duration of each grain. Short grains sound more fragmented; longer grains retain more of the source.";
+    if(id=="pitch")return "Pitch Scatter\nRandom pitch variation per grain, in semitones. Zero keeps the original pitch.";
+    if(id=="mix")return "Dry / Wet\nBlends the original input with the grain effect. 0% is dry; 100% is wet. Reverb is applied after this mix.";
+    if(id=="reverb")return "Reverb\nAdds space and a decaying tail. At zero, the halo is white. Higher amounts turn it blue and increase the glow.";
+    if(id=="jitter")return "Trigger Jitter\nRandom variation in grain timing. Zero gives regular triggers; higher values create a looser rhythm.";
+    if(id=="spread")return "Stereo Spread\nThe width of random grain panning. Zero keeps grains centered; higher values spread them across the stereo field.";
+    if(id=="lookback")return "Lookback\nReads grains from earlier input audio. Higher values reach further back into the input history.";
+    if(id=="output")return "Output Gain\nAdjusts the final output level, in dB.";
+    if(id=="ir")return "IR Length\nThe duration of each grain's impulse response. Shorter responses feel tighter; longer ones add more resonance.";
+    if(id=="strategy")return "IR Selection\nChooses a response for each grain: fixed, cycling, random, weighted, or matched by spectral centroid.";
+    if(id=="seed")return "Random Seed\nChanges the random sequence. The same input, seed and starting state reproduce the same variation.";
+    if(id=="bypass")return "Bypass\nPasses the original input through, skipping the grain effect, reverb and output gain.";
+    if(id=="xy")return "XY Pad\nMove horizontally to change Density and vertically to change Pitch Scatter. The side sliders control the same parameters.";
+    if(id=="input")return "Live Input\nShows the left and right input waveforms from your host. The clip indicator lights up when input peaks reach full scale.";
     return {};
 }
-

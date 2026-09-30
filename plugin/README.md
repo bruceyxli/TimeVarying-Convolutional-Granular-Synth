@@ -22,7 +22,7 @@ both the native UI and the host bypass parameter transition to dry unity.
 ## Controls
 
 Hover over a parameter, its label or readout for about half a second to see a
-short Chinese description. The same help covers the XY pad, input scope, bypass
+short English description. The same help covers the XY pad, input scope, bypass
 and advanced controls. Tooltips use the interface's dark, cool-colour palette.
 
 - XY pad: horizontal Density, vertical Pitch Scatter. The adjacent sliders are
