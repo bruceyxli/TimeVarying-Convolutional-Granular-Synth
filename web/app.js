@@ -259,7 +259,7 @@ function setButtons() {
 async function render() {
   for (const id of controls) {
     if (!$(id).checkValidity()) {
-      $("detail-panel").hidden = false; $("detail-toggle").setAttribute("aria-expanded", "true");
+      setDetailsPage(Boolean($(id).closest("#detail-panel")));
       $(id).reportValidity(); return;
     }
   }
@@ -325,11 +325,11 @@ $("preset").addEventListener("change", applyPreset);
 $("previous-preset").addEventListener("click", () => cyclePreset(-1));
 $("next-preset").addEventListener("click", () => cyclePreset(1));
 $("reset").addEventListener("click", applyPreset);
-$("detail-toggle").addEventListener("click", () => {
-  const open = $("detail-panel").hidden;
+function setDetailsPage(open) {
   const instrument = document.querySelector(".instrument"), workspace = document.querySelector(".workspace");
-  if (open) instrument.style.setProperty("--details-height", `${workspace.offsetHeight + document.querySelector(".detail-section").offsetHeight}px`);
+  if (open && !workspace.hidden) instrument.style.setProperty("--details-height", `${workspace.offsetHeight}px`);
   workspace.hidden = open;
+  document.querySelector(".detail-section").hidden = !open;
   instrument.classList.toggle("details-open", open);
   $("detail-panel").hidden = !open;
   $("details-title").hidden = !open;
@@ -338,7 +338,8 @@ $("detail-toggle").addEventListener("click", () => {
   window.scrollTo({top:0,behavior:"instant"});
   if (open) $("details-title").focus({preventScroll:true});
   else { $("detail-toggle").focus({preventScroll:true}); scheduleDraw();drawWave($("source-wave"), state.sourceWave); }
-});
+}
+$("detail-toggle").addEventListener("click", () => setDetailsPage($("detail-panel").hidden));
 $("upload-button").addEventListener("click", () => $("source-file").click());
 $("source-file").addEventListener("change", () => upload($("source-file").files[0]));
 $("use-demo").addEventListener("click", () => { if (state.demo) setSource(state.demo.name, state.demo, true); });
