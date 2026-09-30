@@ -65,11 +65,75 @@ Then open the URL printed in the terminal (usually `http://localhost:8501`).
 
 Five built-in **presets** are available for quick starting points.
 
+The most recent render remains available for playback and download after changing
+controls. Press Render again to apply the new settings. Invalid uploads and render
+parameters now produce readable errors rather than NaNs or silently generated noise.
+
+## Performance and stability
+
+The renderer reuses bounded resampling FIR caches, a per-render Hann window, and
+per-render IR FFTs. IR-selection weights and centroids are prepared once; spectral
+analysis is skipped unless centroid selection is active. Mixing accumulates directly
+into one stereo output buffer. The UI caches decoded uploads and generated IR banks.
+
+On one Windows 11 machine, five warm runs against `1f8f819` gave these medians
+(48 kHz; seeded synthetic source; source/IR generation and WAV encoding excluded):
+
+| Scenario | Before | After | Speedup | Traced peak memory before → after |
+|---------|-------:|------:|--------:|---------------------------------:|
+| Default, 10 s | 220.9 ms | 45.3 ms | 4.87× | 31.9 → 5.0 MiB |
+| Dense, 40 s, 120 grains/s, 50 ms grains | 1925.4 ms | 455.2 ms | 4.23× | 125.3 → 19.1 MiB |
+| Centroid selection, 10 s | 201.4 ms | 65.1 ms | 3.10× | 31.9 → 4.6 MiB |
+
+The default cold render measured 212.0 → 64.1 ms. Memory was measured in separate
+`tracemalloc` runs; it is **not total process RSS** and excludes previously cached
+FIRs and input preparation. Full measurements, environment and other variants are in
+[benchmark-windows.json](docs/benchmark-windows.json). Performance varies by machine.
+
+This is still an **offline Python renderer**, not a real-time callback or a VST.
+The planned Windows VST3 architecture and validation requirements are described in
+[the VST3 migration plan](docs/vst3-roadmap.md).
+
+### Audio behavior fixes
+
+- Upward pitch shifts now read enough input to fill a grain. Previously +12 semitones
+  left approximately 75% of a grain zero-padded. Pitch ratio quantization remains 0.01.
+- Variant A now blends original and pre-convolved source **before granulation**;
+  Wet=1 / Dry=0 produces audio, and Wet=0 / Dry=1 uses the original source. The source
+  scan length stays equal to the original clip length; pre-convolution tails outside
+  that clip are not scanned.
+- Empty/non-finite sources and IRs, invalid weights and invalid parameters fail
+  explicitly. Short valid inputs are zero-padded, never replaced with random noise.
+- Output is exactly the requested duration, with later tails clipped. Normalization
+  only attenuates peaks exceeding 1.0; it does not boost quieter renders.
+
+These fixes intentionally change pitched renders and Variant A; old/new waveforms
+are not claimed to be identical. The same inputs/configuration/seed remain reproducible.
+
+### Tests and repeatable benchmarks
+
+```bash
+python -m unittest discover -s tests -v
+python scripts/benchmark_render.py
+python scripts/benchmark_render.py --compare-ref <baseline-commit> --output report.json
+```
+
+Tests cover all variants/selection strategies, pitch frequency and grain coverage,
+FFT equivalence including tails, wet/dry linearity, repeatability, input immutability,
+validation, audio decoding, and Streamlit result persistence. GitHub Actions runs
+them on Windows/Linux with Python 3.10/3.12. Benchmarks use separate baseline/current
+subprocesses and do not modify your checkout.
+
+The API accepts sample rates 8–192 kHz, pitch ranges 0–24 semitones, grain lengths
+up to 1000 ms, long IRs up to 10 s, and up to 1,000,000 grains / 115,200,000 output
+samples per channel per render. These are allocation guards, not real-time targets.
+
 ## Project Structure
 
 ```
 src/app/
 ├── engine.py     # Granular engine, variants, rendering pipeline
+├── audio_io.py   # UI-independent byte decoding and sample-rate conversion
 ├── features.py   # Spectral centroid computation
 ├── ir_bank.py    # Micro-IR generation, loading, and selection
 ├── presets.py    # Preset definitions

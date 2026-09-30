@@ -51,6 +51,9 @@ def generate_demo_ir_bank(
     Generate a bank of short IRs: white-noise impulse -> random bandpass -> exponential decay,
     then align the peak to t=0 and normalize.
     """
+    _validate_ir_settings(sample_rate, target_ir_ms)
+    if not isinstance(num_irs, (int, np.integer)) or not 1 <= num_irs <= 4096:
+        raise ValueError("num_irs must be an integer between 1 and 4096")
     rng = np.random.default_rng(seed)
     ir_len = int(sample_rate * target_ir_ms / 1000.0)
     ir_len = max(8, ir_len)
@@ -64,7 +67,7 @@ def generate_demo_ir_bank(
         b, a = _butter_bandpass(low, high, sample_rate, order=2)
         colored = lfilter(b, a, base)
         # Exponential decay with random time constant
-        tau_ms = float(rng.uniform(6.0, target_ir_ms * 1.2))
+        tau_ms = float(rng.uniform(min(6.0, target_ir_ms), target_ir_ms * 1.2))
         env = _exp_decay(ir_len, sample_rate, tau_ms=tau_ms)
         ir = colored * env
         ir = _align_peak_to_zero(ir)
@@ -84,14 +87,19 @@ def load_ir_folder(
     Load IRs from a folder (wav/flac/etc.). If longer than target length, take a segment
     around the maximum peak; if sample rate differs, resample.
     """
+    _validate_ir_settings(sample_rate, target_ir_ms)
+    if max_files is not None and (not isinstance(max_files, int) or max_files < 1):
+        raise ValueError("max_files must be a positive integer or None")
     exts = {'.wav', '.flac', '.aiff', '.aif', '.ogg'}
-    files = [os.path.join(folder, f) for f in os.listdir(folder)
+    files = [os.path.join(folder, f) for f in sorted(os.listdir(folder))
              if os.path.splitext(f)[1].lower() in exts]
     if max_files:
         files = files[:max_files]
     items: List[IRItem] = []
     for path in files:
         wav, sr = sf.read(path, dtype='float32', always_2d=False)
+        if wav.size == 0 or not np.all(np.isfinite(wav)):
+            raise ValueError(f"IR file is empty or contains non-finite samples: {path}")
         if wav.ndim > 1:
             wav = np.mean(wav, axis=-1)
         if sr != sample_rate:
@@ -100,7 +108,7 @@ def load_ir_folder(
             up = sample_rate // gcd
             down = sr // gcd
             wav = resample_poly(wav, up, down).astype(np.float32)
-        target_len = int(sample_rate * target_ir_ms / 1000.0)
+        target_len = max(8, int(sample_rate * target_ir_ms / 1000.0))
         if len(wav) >= target_len:
             # take a segment near the maximum peak
             idx = int(np.argmax(np.abs(wav)))
@@ -115,6 +123,63 @@ def load_ir_folder(
         centroid = compute_spectral_centroid(seg, sample_rate)
         items.append(IRItem(samples=seg, centroid_hz=centroid))
     return items
+
+
+def _validate_ir_settings(sample_rate: int, target_ir_ms: float) -> None:
+    if not isinstance(sample_rate, (int, np.integer)) or not 8000 <= sample_rate <= 192000:
+        raise ValueError("sample_rate must be an integer between 8000 and 192000")
+    if not np.isfinite(target_ir_ms) or not 0 < target_ir_ms <= 1000:
+        raise ValueError("target_ir_ms must be between 0 (exclusive) and 1000")
+
+
+class IRSelector:
+    """Validate once and reuse selection data throughout a render."""
+
+    STRATEGIES = frozenset(("fixed", "cycle", "random", "weighted", "centroid"))
+
+    def __init__(self, ir_items: List[IRItem], strategy: str,
+                 weights: Optional[np.ndarray] = None):
+        if strategy not in self.STRATEGIES:
+            raise ValueError(f"Unknown IR strategy: {strategy}")
+        if not ir_items:
+            raise ValueError("A non-empty IR bank is required for wet standard rendering")
+        self.items = []
+        for item in ir_items:
+            samples = np.asarray(item.samples, dtype=np.float32)
+            if samples.ndim != 1 or samples.size == 0 or not np.all(np.isfinite(samples)):
+                raise ValueError("IR samples must be non-empty, finite, mono audio")
+            if not np.isfinite(item.centroid_hz) or item.centroid_hz < 0:
+                raise ValueError("IR centroids must be finite and non-negative")
+            self.items.append(IRItem(samples, float(item.centroid_hz)))
+        self.strategy = strategy
+        self.count = len(self.items)
+        self.counter = -1
+        self.centroids = np.asarray([item.centroid_hz for item in self.items])
+        self.weights = None
+        if strategy == "weighted" and weights is not None:
+            w = np.asarray(weights, dtype=np.float64)
+            if (w.shape != (self.count,) or not np.all(np.isfinite(w))
+                    or np.any(w < 0) or not np.any(w > 0)):
+                raise ValueError("weights must match the IR bank, be finite, non-negative and have positive sum")
+            # Scaling first prevents overflow with large but finite weights.
+            w = w / np.max(w)
+            self.weights = w / np.sum(w)
+
+    def select(self, rng: np.random.Generator, grain_centroid_hz: Optional[float] = None) -> int:
+        if self.strategy == "fixed":
+            return 0
+        if self.strategy == "cycle":
+            self.counter = (self.counter + 1) % self.count
+            return self.counter
+        if self.strategy == "weighted" and self.weights is not None:
+            return int(rng.choice(self.count, p=self.weights))
+        if self.strategy == "centroid":
+            if grain_centroid_hz is None or not np.isfinite(grain_centroid_hz):
+                raise ValueError("centroid selection requires a finite grain centroid")
+            diffs = np.abs(self.centroids - grain_centroid_hz)
+            candidates = np.flatnonzero(diffs <= np.min(diffs) + 1e-6)
+            return int(rng.choice(candidates))
+        return int(rng.integers(0, self.count))
 
 
 def select_ir_index(
@@ -133,30 +198,12 @@ def select_ir_index(
     - weighted: random with given weights (same length as bank)
     - centroid: pick IR whose centroid is closest to grain's centroid (ties broken randomly)
     """
-    n = len(ir_items)
-    if n == 0:
-        return 0
-    st = (strategy or 'random').lower()
-    if st == 'fixed':
-        return 0
-    if st == 'cycle':
-        if cycle_counter is None or not cycle_counter:
-            return 0
-        cycle_counter[0] = (cycle_counter[0] + 1) % n
-        return cycle_counter[0]
-    if st == 'weighted' and weights is not None:
-        w = np.asarray(weights, dtype=np.float64)
-        if w.shape[0] != n or np.all(w <= 0):
-            return int(rng.integers(0, n))
-        w = w / np.sum(w)
-        return int(rng.choice(np.arange(n), p=w))
-    if st == 'centroid' and grain_centroid_hz is not None:
-        cents = np.array([it.centroid_hz for it in ir_items], dtype=np.float64)
-        diffs = np.abs(cents - float(grain_centroid_hz))
-        min_diff = np.min(diffs)
-        cand = np.where(diffs <= (min_diff + 1e-6))[0]
-        return int(rng.choice(cand))
-    # default: random
-    return int(rng.integers(0, n))
+    selector = IRSelector(ir_items, strategy, weights)
+    if strategy == "cycle" and cycle_counter:
+        selector.counter = cycle_counter[0]
+    result = selector.select(rng, grain_centroid_hz)
+    if strategy == "cycle" and cycle_counter:
+        cycle_counter[0] = selector.counter
+    return result
 
 

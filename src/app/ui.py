@@ -1,5 +1,6 @@
 import io
-from typing import Optional, List
+import hashlib
+from time import perf_counter
 
 import sys
 from pathlib import Path
@@ -12,7 +13,8 @@ import soundfile as sf
 import streamlit as st
 
 from src.app.engine import GranularConfig, render_offline
-from src.app.ir_bank import generate_demo_ir_bank, IRItem
+from src.app.audio_io import decode_audio
+from src.app.ir_bank import generate_demo_ir_bank
 from src.app.presets import preset_names, get_preset
 
 
@@ -23,6 +25,10 @@ st.set_page_config(
     menu_items={"Get Help": None, "Report a bug": None, "About": None},
 )
 st.title("Time-Varying Convolutional Granular Synth")
+st.caption("Offline renderer · render speed is not an audio-callback latency guarantee")
+
+_decode_cached = st.cache_data(max_entries=2, show_spinner=False)(decode_audio)
+_bank_cached = st.cache_data(max_entries=4, show_spinner=False)(generate_demo_ir_bank)
 
 
 # UI Frame for Streamlit
@@ -75,17 +81,7 @@ if _pending_dur is not None:
 def _read_uploaded_audio(file, target_sr: int) -> np.ndarray:
     if file is None:
         return np.array([], dtype=np.float32)
-    data, sr = sf.read(file, dtype='float32', always_2d=False)
-    if data.ndim > 1:
-        data = np.mean(data, axis=-1)
-    if sr != target_sr:
-        from scipy.signal import resample_poly
-        import math
-        g = math.gcd(target_sr, sr)
-        up = target_sr // g
-        down = sr // g
-        data = resample_poly(data, up, down).astype(np.float32)
-    return data
+    return _decode_cached(file.getvalue(), target_sr)
 
 
 with st.sidebar:
@@ -150,36 +146,25 @@ with st.sidebar:
 st.subheader("Input")
 uploaded = st.file_uploader("Upload audio (optional; built-in demo used if none)", type=["wav", "flac", "aiff", "aif", "ogg"])
 
-# Auto-align Duration to uploaded audio length (on first detect or SR change)
+# Auto-align once per content/sample-rate pair, including same-name replacements.
+upload_error = None
 if uploaded is not None:
     try:
-        # Ensure file pointer at start for multiple reads
-        if hasattr(uploaded, "seek"):
-            uploaded.seek(0)
-    except Exception:
-        pass
-    _last_name = st.session_state.get("_last_uploaded_name")
-    _last_sr = st.session_state.get("_last_uploaded_sr")
-    _name = getattr(uploaded, "name", None)
-    # Recompute duration if new file or sample rate changed
-    if _name != _last_name or _last_sr != st.session_state.get("sr", 48000):
-        data = _read_uploaded_audio(uploaded, target_sr=st.session_state.get("sr", 48000))
-        if len(data) > 0:
-            dur = float(len(data) / float(st.session_state.get("sr", 48000)))
-            # Clamp to slider's bounds (2..40 seconds)
-            if np.isfinite(dur) and dur > 0:
-                new_dur = float(np.clip(dur, 2.0, 40.0))
-                if abs(new_dur - float(st.session_state.get("duration", 10.0))) >= 1e-6:
-                    # Defer update until next run to avoid modifying after widget creation
-                    st.session_state["_desired_duration"] = new_dur
-                st.session_state["_last_uploaded_name"] = _name
-                st.session_state["_last_uploaded_sr"] = st.session_state.get("sr", 48000)
-                try:
-                    st.rerun()
-                except Exception:
-                    st.experimental_rerun()
+        identity = (hashlib.sha256(uploaded.getvalue()).hexdigest(), sr)
+        if identity != st.session_state.get("_last_uploaded_identity"):
+            data = _read_uploaded_audio(uploaded, target_sr=sr)
+            new_dur = float(np.clip(len(data) / sr, 2.0, 40.0))
+            st.session_state["_last_uploaded_identity"] = identity
+            if abs(new_dur - float(duration)) >= 1e-6:
+                st.session_state["_desired_duration"] = new_dur
+                st.rerun()
+    except (ValueError, RuntimeError, OSError) as exc:
+        upload_error = str(exc)
+        st.error(f"Cannot read uploaded audio: {upload_error}")
+else:
+    st.session_state.pop("_last_uploaded_identity", None)
 
-do_render = st.button("Render", type="primary")
+do_render = st.button("Render", type="primary", disabled=upload_error is not None)
 
 if do_render:
     cfg = GranularConfig(
@@ -199,7 +184,11 @@ if do_render:
         normalize=True,
     )
     # Source material
-    source = _read_uploaded_audio(uploaded, target_sr=sr)
+    try:
+        source = _read_uploaded_audio(uploaded, target_sr=sr)
+    except (ValueError, RuntimeError, OSError) as exc:
+        st.error(f"Cannot read uploaded audio: {exc}")
+        st.stop()
     if len(source) == 0:
         # Generate default demo source
         n = int(sr * duration)
@@ -213,29 +202,28 @@ if do_render:
         pad = (pad * env).astype(np.float32)
         source = (pad * 0.3 + noise).astype(np.float32)
 
-    # IR bank (auto-generated)
-    with st.spinner("Generating micro IR bank..."):
-        ir_items: List[IRItem] = generate_demo_ir_bank(
-            num_irs=int(num_irs),
-            target_ir_ms=float(ir_len),
-            sample_rate=sr,
-            seed=int(seed),
-        )
-
-    with st.spinner("Rendering..."):
-        if ir_strategy == "weighted":
-            # simple linear weights demo
-            weights = np.linspace(1.0, 2.0, num=len(ir_items)).astype(np.float64)
-        else:
-            weights = None
-        audio = render_offline(source_audio=source, ir_items=ir_items, cfg=cfg, weights=weights)
+    try:
+        # A/B never use a micro-IR bank. Standard banks are cached across reruns.
+        ir_items = []
+        if cfg.variant == "standard":
+            with st.spinner("Preparing micro IR bank..."):
+                ir_items = _bank_cached(
+                    num_irs=int(num_irs), target_ir_ms=float(ir_len),
+                    sample_rate=sr, seed=int(seed),
+                )
+        with st.spinner("Rendering..."):
+            weights = np.linspace(1.0, 2.0, num=len(ir_items)) if ir_strategy == "weighted" else None
+            started = perf_counter()
+            audio = render_offline(source_audio=source, ir_items=ir_items, cfg=cfg, weights=weights)
+            elapsed = perf_counter() - started
+    except (ValueError, RuntimeError, OSError) as exc:
+        st.error(f"Render failed: {exc}")
+        st.stop()
 
     # Play & Download (encode to WAV bytes first to avoid internal conversion issues)
-    st.success("Done")
     buf = io.BytesIO()
     sf.write(buf, audio, samplerate=sr, format="WAV", subtype="PCM_24")
     wav_bytes = buf.getvalue()
-    st.audio(wav_bytes, format="audio/wav")
     # Build Windows-safe timestamped filename using uploaded sample name (or demo)
     from datetime import datetime
     ts = datetime.now().strftime("%m-%d %H-%M-%S")
@@ -247,7 +235,22 @@ if do_render:
     except Exception:
         pass
     dl_name = f"[{ts}] {sample_name}.wav"
-    st.download_button("Download WAV", data=wav_bytes, file_name=dl_name, mime="audio/wav")
+    st.session_state["last_render"] = {
+        "wav": wav_bytes, "name": dl_name, "seconds": elapsed,
+        "duration": float(duration), "sample_rate": sr,
+    }
+
+if "last_render" in st.session_state:
+    result = st.session_state["last_render"]
+    st.subheader("Last rendered result")
+    st.caption("Changing controls does not change this audio until you render again.")
+    st.success(
+        f"{result['duration']:.2f}s audio at {result['sample_rate']} Hz · "
+        f"rendered in {result['seconds']:.3f}s · "
+        f"{result['duration'] / max(result['seconds'], 1e-9):.1f}× playback speed"
+    )
+    st.audio(result["wav"], format="audio/wav")
+    st.download_button("Download WAV", data=result["wav"], file_name=result["name"], mime="audio/wav")
 
 st.markdown("---")
 
