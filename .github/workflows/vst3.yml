@@ -26,7 +26,7 @@ jobs:
           Invoke-WebRequest 'https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip' -OutFile pluginval.zip
           Expand-Archive pluginval.zip pluginval
           $validator = Get-ChildItem pluginval -Recurse -Filter pluginval.exe | Select-Object -First 1
-          & $validator.FullName --strictness-level 5 --validate-in-process --validate "$pwd/plugin/build/Orbit_artefacts/Release/VST3/ORBIT.vst3"
+          & $validator.FullName --strictness-level 5 --validate "$pwd/plugin/build/Orbit_artefacts/Release/VST3/ORBIT.vst3" | Out-Host
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package
         shell: pwsh
@@ -40,6 +40,7 @@ jobs:
           & package/checks/OrbitChecks.exe "$pwd/package/ORBIT-native.png"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item plugin/README.md package/README.md
+          Copy-Item LICENSE package/LICENSE.txt
           Copy-Item web/fonts/OFL.txt package/Oxanium-OFL.txt
           Copy-Item plugin/build/_deps/juce-src/LICENSE.md package/JUCE-LICENSE.md
       - uses: actions/upload-artifact@v4

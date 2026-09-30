@@ -5,6 +5,10 @@ The left INPUT display receives live DAW input, with separate L/R envelopes,
 fixed amplitude scale and clipping indication. No browser, Python process or
 internet connection is needed by the compiled plugin.
 
+Source: https://github.com/bruceyxli/TimeVarying-Convolutional-Granular-Synth
+The native implementation is on `codex/render-performance-stability` while PR #1
+is under review. See `docs/vst3-validation.md` for the first verified build.
+
 ## Install
 
 Copy the **entire `ORBIT.vst3` directory** to a VST3 location scanned by your DAW,
