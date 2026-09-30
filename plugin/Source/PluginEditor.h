@@ -24,7 +24,7 @@ struct OrbitLook : juce::LookAndFeel_V4 {
     void drawRotarySlider(juce::Graphics&,int,int,int,int,float,float,float,juce::Slider&) override;
 };
 
-class InputScope final : public juce::Component, private juce::Timer {
+class InputScope final : public juce::Component, public juce::SettableTooltipClient, private juce::Timer {
 public:
     InputScope(orbit::ScopeQueue&,OrbitLook&);
     void paint(juce::Graphics&) override;
@@ -38,7 +38,7 @@ private:
     bool stale=true;
 };
 
-class OrbitPad final : public juce::Component {
+class OrbitPad final : public juce::Component, public juce::SettableTooltipClient {
 public:
     explicit OrbitPad(juce::AudioProcessorValueTreeState&);
     ~OrbitPad() override;
@@ -60,12 +60,13 @@ private:
     void finish();
 };
 
-class OrbitEditor final : public juce::AudioProcessorEditor, private juce::Timer {
+class OrbitEditor final : public juce::AudioProcessorEditor, public juce::TooltipClient, private juce::Timer {
 public:
     explicit OrbitEditor(OrbitProcessor&);
     ~OrbitEditor() override;
     void paint(juce::Graphics&) override;
     void resized() override;
+    juce::String getTooltip() override;
 private:
     OrbitProcessor& processor;
     OrbitLook look;
@@ -89,6 +90,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
     std::array<float,13> previousValues{};
     bool expanded=false;
+    juce::TooltipWindow tooltips{this,550};
     void timerCallback() override;
     void applyPreset(int);
     void syncPreset();

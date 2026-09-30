@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "ParameterHelp.h"
 #include <BinaryData.h>
 #include <cmath>
 
@@ -32,6 +33,9 @@ OrbitLook::OrbitLook() {
     setColour(juce::Slider::textBoxTextColourId,text);
     setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
     setColour(juce::Slider::textBoxBackgroundColourId,background);
+    setColour(juce::TooltipWindow::backgroundColourId,juce::Colour(0xff121c29));
+    setColour(juce::TooltipWindow::textColourId,text);
+    setColour(juce::TooltipWindow::outlineColourId,line);
 }
 juce::Font OrbitLook::font(float size) const { return juce::Font(juce::FontOptions(face).withHeight(size)); }
 void OrbitLook::drawLinearSlider(juce::Graphics& g,int x,int y,int width,int height,float position,float,float,juce::Slider::SliderStyle,juce::Slider& slider) {
@@ -223,7 +227,8 @@ OrbitEditor::OrbitEditor(OrbitProcessor& p):AudioProcessorEditor(p),processor(p)
         slider.setVelocityModeParameters(.3,1,0.0,true,juce::ModifierKeys::shiftModifier);
         if(auto* parameter=p.state.getParameter(id))
             slider.setDoubleClickReturnValue(true,parameter->convertFrom0to1(parameter->getDefaultValue()));
-        slider.setTooltip(juce::String(name)+" · Shift-drag for precision · Double-click to reset");
+        slider.setTooltip(orbitParameterHelp(id));
+        slider.setDescription(orbitParameterHelp(id));
         addAndMakeVisible(slider);
         sliders.push_back(std::make_unique<SliderAttachment>(p.state,id,slider));
     };
@@ -237,6 +242,9 @@ OrbitEditor::OrbitEditor(OrbitProcessor& p):AudioProcessorEditor(p),processor(p)
     ir.addItemList({"8 ms","16 ms","24 ms","32 ms"},1);
     strategy.addItemList({"Fixed","Cycle","Random","Weighted","Centroid"},1);
     ir.setTitle("IR length"); strategy.setTitle("IR selection"); preset.setTitle("Preset");
+    ir.setTooltip(orbitParameterHelp("ir"));strategy.setTooltip(orbitParameterHelp("strategy"));
+    bypass.setTooltip(orbitParameterHelp("bypass"));pad.setTooltip(orbitParameterHelp("xy"));
+    scope.setTooltip(orbitParameterHelp("input"));
     preset.setTextWhenNothingSelected("Custom");
     for(auto* c:std::initializer_list<juce::Component*>{&scope,&pad,&preset,&ir,&strategy,&previous,&next,&details,&bypass,&savePreset}) addAndMakeVisible(c);
     addChildComponent(savePanel);
@@ -263,6 +271,26 @@ OrbitEditor::OrbitEditor(OrbitProcessor& p):AudioProcessorEditor(p),processor(p)
     refreshPresets(); startTimerHz(30);
 }
 OrbitEditor::~OrbitEditor() { stopTimer(); setLookAndFeel(nullptr); }
+juce::String OrbitEditor::getTooltip() {
+    // Parameter names and large readouts are painted on the editor itself.
+    const auto point=getMouseXYRelative().toFloat()*(1000.0f/static_cast<float>(getWidth()));
+    const auto hit=[&](int x,int y,int w,int h){return juce::Rectangle<float>(static_cast<float>(x),static_cast<float>(y),static_cast<float>(w),static_cast<float>(h)).contains(point);};
+    if(hit(40,255,220,102))return orbitParameterHelp("density");
+    if(hit(40,380,220,63))return orbitParameterHelp("grain");
+    if(hit(735,169,220,103))return orbitParameterHelp("pitch");
+    if(hit(735,310,220,133))return orbitParameterHelp("mix");
+    if(hit(440,503,170,58))return orbitParameterHelp("reverb");
+    if(expanded) {
+        if(hit(40,588,265,52))return orbitParameterHelp("jitter");
+        if(hit(40,666,265,52))return orbitParameterHelp("spread");
+        if(hit(368,588,265,52))return orbitParameterHelp("lookback");
+        if(hit(368,666,265,52))return orbitParameterHelp("output");
+        if(hit(690,580,100,56))return orbitParameterHelp("ir");
+        if(hit(808,580,150,56))return orbitParameterHelp("strategy");
+        if(hit(690,666,268,52))return orbitParameterHelp("seed");
+    }
+    return {};
+}
 void OrbitEditor::setExpanded(bool open) {
     expanded=open;
     for(auto* c:std::initializer_list<juce::Component*>{&jitter,&spread,&lookback,&output,&seed,&ir,&strategy}) c->setVisible(open);
