@@ -115,7 +115,7 @@ function drawOrbit() {
   }
   ctx.strokeStyle = "#607f9f"; ctx.lineWidth = .6;
   ctx.beginPath(); ctx.moveTo(cx - 4, cy); ctx.lineTo(cx + 4, cy); ctx.moveTo(cx, cy - 4); ctx.lineTo(cx, cy + 4); ctx.stroke();
-  const disc = OrbitGeometry.squareToDisc(target[0] * 2 - 1, 1 - target[2] * 2);
+  const disc = OrbitGeometry.squareToDisc(target[0] * 2 - 1, 1 - target[1] * 2);
   $("xy-handle").style.left = `${cx + disc[0] * s * .39}px`;
   $("xy-handle").style.top = `${cy + disc[1] * s * .39}px`;
   if (settling) scheduleDraw();
@@ -130,8 +130,8 @@ function scheduleDraw() {
 
 function updateUI(changed = true) {
   $("density-value").textContent = $("density").value;
-  $("pitch-value").textContent = $("pitch").value;
-  $("grain-value").textContent = $("grain").value;
+  $("pitch-value").textContent = value("pitch").toFixed(1);
+  $("grain-value").textContent = value("grain").toFixed(1);
   const room = value("reverb");
   $("reverb-value").textContent = room === 0 ? "OFF" : `${percent(room)}%`;
   $("reverb").setAttribute("aria-valuetext", room === 0 ? "Off" : `${percent(room)}%`);
@@ -140,8 +140,11 @@ function updateUI(changed = true) {
   $("reverb-knob").style.setProperty("--glow-size", `${room * 18}px`);
   document.querySelector(".reverb-control").style.setProperty("--halo-colour", room > 0 ? "#82cfff" : "#fff");
   $("wet").setAttribute("aria-valuetext", `${percent(value("wet"))}% wet`);
-  $("wet-dial-value").textContent = percent(value("wet"));
-  $("mix-dial").style.setProperty("--angle", `${value("wet") * 270}deg`);
+  $("wet-value").textContent = (value("wet") * 100).toFixed(1);
+  for (const [id, name] of [["density","Density"],["grain","Grain size"],["pitch","Pitch scatter"],["wet","Dry wet"]]) {
+    const number = $(id + "-value");
+    number.setAttribute("aria-label", `${name} value ${number.textContent}. Double-click or press Enter to edit`);
+  }
   $("jitter-value").textContent = `${percent(value("jitter"))}%`;
   $("pan-value").textContent = `${percent(value("pan"))}%`;
   $("duration-value").textContent = `${value("duration")} s`;
@@ -300,6 +303,37 @@ controls.forEach((id) => $(id).addEventListener("input", () => updateUI()));
 document.querySelectorAll("[data-variant]").forEach(button => button.addEventListener("click", () => {
   $("variant").value = button.dataset.variant; updateUI();
 }));
+// Numeric entry is presentation-only until Enter commits; Escape/blur cancels.
+let activeNumericEntry = null;
+function cancelNumericEntry() {
+  if (!activeNumericEntry) return;
+  const {button, input} = activeNumericEntry; activeNumericEntry = null;
+  input.hidden = true; button.hidden = false; input.removeAttribute("aria-invalid");
+}
+["density", "grain", "pitch", "wet"].forEach(id => {
+  const button = $(id + "-value"), input = $(id + "-entry"), slider = $(id);
+  const open = () => {
+    cancelNumericEntry();activeNumericEntry = {button,input};
+    input.value = (value(id) * (id === "wet" ? 100 : 1)).toFixed(id === "density" ? 0 : 1);
+    button.hidden = true;input.hidden = false;input.focus();input.select();
+  };
+  button.addEventListener("dblclick", open);
+  button.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault();open(); } });
+  input.addEventListener("blur", cancelNumericEntry);
+  input.addEventListener("keydown", event => {
+    if (event.key === "Escape") { event.preventDefault();cancelNumericEntry();button.focus(); }
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const typed = input.value.trim();
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(typed) || !Number.isFinite(Number(typed))) {
+      input.setAttribute("aria-invalid", "true");input.select();return;
+    }
+    const scale = id === "wet" ? 100 : 1, lo = Number(slider.min), hi = Number(slider.max), step = Number(slider.step);
+    const bounded = clamp(Number(typed) / scale, lo, hi);
+    slider.value = clamp(lo + Math.round((bounded - lo) / step) * step, lo, hi).toFixed(3);
+    cancelNumericEntry();updateUI();button.focus();
+  });
+});
 // Keep real range inputs for keyboard/assistive control, add fine pointer movement.
 ["density", "grain", "pitch", "wet", "reverb"].forEach((id) => {
   const input = $(id), initial = input.defaultValue;
@@ -341,6 +375,7 @@ $("previous-preset").addEventListener("click", () => cyclePreset(-1));
 $("next-preset").addEventListener("click", () => cyclePreset(1));
 $("reset").addEventListener("click", applyPreset);
 function setDetailsPage(open) {
+  cancelNumericEntry();
   const instrument = document.querySelector(".instrument"), workspace = document.querySelector(".workspace");
   if (open && !workspace.hidden) instrument.style.setProperty("--details-height", `${workspace.offsetHeight}px`);
   workspace.hidden = open;
@@ -396,7 +431,7 @@ function moveXY(event) {
   const radius = Math.min(rect.width, rect.height) * .39;
   const point = OrbitGeometry.discToSquare((event.clientX - rect.left - rect.width / 2) / radius, (event.clientY - rect.top - rect.height / 2) / radius);
   const x = (point[0] + 1) / 2, y = (1 - point[1]) / 2;
-  $("density").value = Math.round(10 + x * 110); $("pitch").value = (y * 12).toFixed(1);
+  $("density").value = Math.round(10 + x * 110); $("grain").value = (5 + y * 45).toFixed(1);
   updateUI();
 }
 $("orbit-pad").addEventListener("pointerdown", (event) => {
@@ -461,7 +496,7 @@ function installParameterHelp() {
     "long-ir": "Long IR\nThe impulse response duration in Convolve then Granulate mode. Longer responses create a more pronounced tail.",
     "duration": "Duration\nThe total length of the rendered audio, in seconds.",
     "sample-rate": "Sample Rate\nThe output sample rate. Higher rates increase processing time and file size.",
-    "orbit-pad": "XY Pad\nDrag inside the circular field to change Density and Pitch Scatter. The full parameter ranges map into the circle; dragging outside stays on its edge. The side sliders control the same parameters."
+    "orbit-pad": "XY Pad\nDrag inside the circular field: X controls Density; Y controls Grain Size. Up makes grains longer. Pitch Scatter is independent. Dragging outside stays on the circular boundary."
   };
 
   const tooltip = document.createElement("div");

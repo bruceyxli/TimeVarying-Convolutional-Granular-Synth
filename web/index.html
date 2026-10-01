@@ -41,11 +41,12 @@
         </div>
         <div class="parameter main-parameter">
           <div class="parameter-heading"><label for="density">DENSITY</label><span class="axis">X</span></div>
-          <div class="large-value"><output id="density-value" for="density">80</output><span>grains/s</span></div>
+          <div class="large-value"><span class="numeric-field"><button type="button" class="numeric-readout" id="density-value" data-parameter="density" aria-label="Density value. Double-click to edit">80</button><input type="text" class="numeric-editor" id="density-entry" aria-label="Density value input" inputmode="decimal" maxlength="12" autocomplete="off" spellcheck="false" hidden></span><span>grains/s</span></div>
           <input id="density" class="main-fader" type="range" min="10" max="120" step="1" value="80">
         </div>
         <div class="parameter secondary-parameter">
-          <div class="parameter-heading"><label for="grain">GRAIN SIZE</label><span><output id="grain-value" for="grain">15</output> ms</span></div>
+          <div class="parameter-heading"><label for="grain">GRAIN SIZE</label><span class="axis">Y</span></div>
+          <div class="large-value"><span class="numeric-field"><button type="button" class="numeric-readout" id="grain-value" data-parameter="grain" aria-label="Grain size value. Double-click to edit">15.0</button><input type="text" class="numeric-editor" id="grain-entry" aria-label="Grain size value input" inputmode="decimal" maxlength="12" autocomplete="off" spellcheck="false" hidden></span><span>ms</span></div>
           <input id="grain" class="main-fader" type="range" min="5" max="50" step="0.1" value="15">
         </div>
       </aside>
@@ -56,7 +57,7 @@
           <button type="button" data-variant="variant_a" aria-pressed="false" title="Convolve then Granulate: a long IR filters the source before grain capture.">PRE CONV</button>
           <button type="button" data-variant="variant_b" aria-pressed="false" title="Grains as IR: source segments excite pitched grains used as impulse responses.">GRAIN IR</button>
         </div>
-        <div class="orbit-stage" id="orbit-pad" role="group" aria-label="XY pad: horizontal density, vertical pitch scatter. Use the Density and Pitch Scatter sliders for keyboard control.">
+        <div class="orbit-stage" id="orbit-pad" role="group" aria-label="XY pad: horizontal density, vertical grain size. Use the Density and Grain Size sliders for keyboard control.">
           <canvas id="orbit-art" aria-hidden="true"></canvas>
           <span id="xy-handle" class="xy-handle" aria-hidden="true"></span>
         </div>
@@ -74,15 +75,15 @@
           </button>
         </div>
         <div class="parameter main-parameter">
-          <div class="parameter-heading"><label for="pitch">PITCH SCATTER</label><span class="axis">Y</span></div>
-          <div class="large-value"><span class="plusminus">±</span><output id="pitch-value" for="pitch">5</output><span>st</span></div>
+          <div class="parameter-heading"><label for="pitch">PITCH SCATTER</label></div>
+          <div class="large-value"><span class="numeric-field"><button type="button" class="numeric-readout" id="pitch-value" data-parameter="pitch" aria-label="Pitch scatter value. Double-click to edit">5.0</button><input type="text" class="numeric-editor" id="pitch-entry" aria-label="Pitch scatter value input" inputmode="decimal" maxlength="12" autocomplete="off" spellcheck="false" hidden></span><span>st</span></div>
           <input id="pitch" class="main-fader" type="range" min="0" max="12" step="0.1" value="5">
         </div>
-        <div class="mix-section">
-          <div class="mix-dial" id="mix-dial" aria-hidden="true"><div><span id="wet-dial-value">65</span><small>%</small></div></div>
-          <div class="mix-description"><label for="wet">DRY / WET</label></div>
+        <div class="parameter secondary-parameter">
+          <div class="parameter-heading"><label for="wet">DRY / WET</label></div>
+          <div class="large-value"><span class="numeric-field"><button type="button" class="numeric-readout" id="wet-value" data-parameter="wet" aria-label="Dry wet value. Double-click to edit">65.0</button><input type="text" class="numeric-editor" id="wet-entry" aria-label="Dry wet value input" inputmode="decimal" maxlength="12" autocomplete="off" spellcheck="false" hidden></span><span>%</span></div>
+          <input id="wet" class="main-fader" type="range" min="0" max="1" step="0.001" value="0.65" aria-label="Dry wet mix">
         </div>
-        <input id="wet" class="main-fader" type="range" min="0" max="1" step="0.001" value="0.65" aria-label="Dry wet mix">
       </aside>
     </section>
 

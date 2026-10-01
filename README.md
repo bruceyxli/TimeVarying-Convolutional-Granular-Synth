@@ -6,9 +6,9 @@ A Python-based granular synthesizer that fuses **granular synthesis** with **tim
 
 The native C++/JUCE effect lives in [plugin/](plugin/README.md): live input,
 per-grain convolution, parameter automation, session state, and a minimal ice-blue
-interface with a live stereo input scope and symmetric output spectrum. Native
-0.5.0 includes Standard, Convolve → Granulate (A), and Grains as IR (B), selected
-in Details → Convolution → Signal path.
+interface with live stereo input/output visualizers. Native 0.6.1 includes
+Standard, Convolve → Granulate (A), and Grains as IR (B), selected above the ring
+or in Details → Convolution → Signal path.
 See the plugin README for build, installation and dependency license details.
 The **ORBIT Windows VST3** GitHub Actions workflow builds and validates Windows x64
 artifacts. DAW-specific session testing remains a release requirement.
@@ -20,7 +20,12 @@ source waveform remains in place. The native counterpart analyzes live DAW outpu
 Click either graph to cycle **Waveform → Spectrum → Spectrogram** independently.
 The three-position selector above the ring controls **PER GRAIN / PRE CONV / GRAIN IR**
 and morphs the ring's shape. The XY handle stays within a circular field while
-retaining the full Density and Pitch ranges. Reverb still controls colour and glow.
+retaining the full Density (X) and Grain Size (Y) ranges. Move up for longer grains;
+Pitch Scatter is independent. Reverb still controls colour and glow.
+Density, Grain Size, Pitch Scatter and Dry/Wet share large numeric readouts and
+faders. Double-click a number (or focus it and press Enter) to type a value;
+Enter applies it, Escape or clicking away cancels. Values snap to the parameter
+step and clamp to its range; Dry/Wet is entered as a percentage.
 In the web preview, the input analyzer loops the decoded source silently alongside
 rendered playback; it is a source preview rather than the native live DAW feed.
 

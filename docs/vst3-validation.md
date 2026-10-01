@@ -1,5 +1,26 @@
 # ORBIT native validation — 2026-09-30
 
+## 0.6.1 — editable matching readouts and Grain Size Y axis
+
+- Native source: `bd710219c12cbfa04d1cbea09d50872f6fb84fda`.
+- Windows build: https://github.com/bruceyxli/TimeVarying-Convolutional-Granular-Synth/actions/runs/36803648054
+- Release VST3/standalone, DSP/host checks and pluginval 1.0.4 strictness 5 passed.
+  The downloaded native host checks also passed locally; the native screenshot was inspected.
+- VST3 SHA-256: `7B2D10CEF50F56CFB34695CE04B191F21976229C21FE939FA3B4D0E86AEC5947`.
+- Density, Grain Size, Pitch Scatter and Dry/Wet have matching large editable
+  readouts. Native host tests cover snapping, clamping, percentage conversion,
+  invalid input, editor commit/cancel and restored display text. Editing uses host
+  parameter gestures; the UI timer does not replace text being edited.
+- XY now maps X to Density and Y to Grain Size, increasing grain duration upward.
+  Pitch Scatter is independent. The same disk mapping preserves the full ranges.
+- Browser checks verified double-click entry, 999 density clamping to 120,
+  12.34 ms snapping to 12.3 ms, 37.5% converting to 0.375, invalid input rejection,
+  Escape cancellation, and saved preset recall. An upward pad drag increased
+  Grain Size from 15 to 49.1 ms while Pitch Scatter remained 5 st.
+- 26 Python unittest cases and seven Node cases passed. No browser console errors.
+  Audio algorithms and parameter IDs/order are unchanged. DAW session/soak checks
+  remain pending.
+
 ## 0.6.0 — switchable views, main mode switch and circular XY
 
 - Native source commit: `4f627c79cb6b367cfda44fa0b0e59dd6b0fd1066`.
