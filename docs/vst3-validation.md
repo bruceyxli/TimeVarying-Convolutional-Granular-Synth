@@ -1,5 +1,46 @@
 # ORBIT native validation — 2026-09-30
 
+## 0.6.0 — switchable views, main mode switch and circular XY
+
+- Native source commit: `4f627c79cb6b367cfda44fa0b0e59dd6b0fd1066`.
+- Windows build: https://github.com/bruceyxli/TimeVarying-Convolutional-Granular-Synth/actions/runs/36802415108
+- VST3/standalone build, DSP/host checks and pluginval 1.0.4 strictness 5 passed.
+  Host checks also passed on the local Windows machine; native main-page screenshots
+  for all three convolution modes were inspected.
+- VST3 SHA-256: `818E7A9E24F25538967222D5AD1EEDFD30FC28DB7C561A667EA95D3AA7111119`.
+- Both clickable displays cycle independently through Waveform, Spectrum and
+  Spectrogram. The native input is captured before processing and output after
+  gain/mono summing. Both use identical frequency/amplitude scales. The spectrogram
+  uses a bounded 192 x 64 circular image with no image shifting; FFT and image work
+  stay on the editor thread. Idle drawing stops once the display has settled.
+- Presentation state survives editor/session recall and remains outside the 15
+  sound parameters and sound presets. Tests cover state recall, independent cycling,
+  wraparound and unchanged sound parameters. Native spectrogram snapshots use a
+  known tone fixture; web screenshots use actual demo playback.
+- PER GRAIN / PRE CONV / GRAIN IR directly set the existing automatable variant
+  parameter. Details and preset recall stay synchronized. Native tests exercise all
+  three main buttons, parameter values, conditional Details controls and rendering.
+  Shape transitions blend ripples, elliptical flow and three lobes. Reverb alone
+  controls white-to-blue colour/glow.
+- The XY handle now uses a square-to-disk mapping and inverse, with radial clipping
+  outside the field. C++ and JavaScript grid tests cover all parameter quadrants,
+  full-range round trips, centre/extremes and outside projection. A browser drag
+  beyond the boundary was inspected: the handle stayed on the circular field.
+- Web input preview uses the same decoded source as the renderer, played through a
+  silent analysis branch. It loops alongside rendered output, not at each granular
+  read position. Waveform shows a labelled full-clip overview when paused and a
+  short live stereo window during playback. Native waveform history is one second;
+  web live history is 4096 samples. These are intentionally different preview modes.
+- 26 Python tests and seven Node tests passed, including actual demo/imported source
+  preview bytes, missing-source errors, geometry and preset persistence. Browser
+  checks cover both plot controls, Enter/Space, view persistence after reload,
+  source/output spectrogram playback, saved preset recall and main/Details mode sync.
+  No browser console errors were observed.
+
+Audio algorithms and sound parameter IDs/order are unchanged from 0.5.0. The extra
+input capture is bounded and nonblocking. Real DAW session/soak validation remains
+pending; previous short DSP benchmarks are not a host-performance guarantee.
+
 ## 0.5.0 — three native IR paths and output spectrum
 
 - Native source commit: `4889cd7056e09b85af45fad4af2ab18d25a010b0`.

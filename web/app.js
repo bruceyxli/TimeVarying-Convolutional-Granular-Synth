@@ -53,7 +53,6 @@ function drawWave(canvas, peaks, progress = 0, colour = "#8cb8d6") {
 
 let orbitVisual = null;
 const audioDisplays = new OrbitAudioDisplays($("audio"));
-const drawOutputSpectrum = () => audioDisplays.drawAll();
 const orbitTargets = () => [(value("density") - 10) / 110, (value("grain") - 5) / 45, value("pitch") / 12, value("wet"), value("reverb"), $("variant").value === "variant_a" ? 1 : 0, $("variant").value === "variant_b" ? 1 : 0];
 function drawOrbit() {
   const { context: ctx, width: w, height: h } = fitCanvas($("orbit-art"));
@@ -353,7 +352,7 @@ function setDetailsPage(open) {
   $("detail-toggle").innerHTML = open ? '<span aria-hidden="true">←</span> Back' : 'Details <span aria-hidden="true">→</span>';
   window.scrollTo({top:0,behavior:"instant"});
   if (open) $("details-title").focus({preventScroll:true});
-  else { $("detail-toggle").focus({preventScroll:true}); scheduleDraw();audioDisplays.drawAll(); drawOutputSpectrum(); }
+  else { $("detail-toggle").focus({preventScroll:true}); scheduleDraw();audioDisplays.drawAll(); }
 }
 $("detail-toggle").addEventListener("click", () => setDetailsPage($("detail-panel").hidden));
 $("upload-button").addEventListener("click", () => $("source-file").click());
@@ -415,7 +414,6 @@ const releaseXY = () => { pointer = null; $("orbit-pad").classList.remove("is-dr
 $("orbit-pad").addEventListener("pointerleave", () => $("orbit-pad").classList.remove("handle-hover"));
 new ResizeObserver(() => {
   scheduleDraw(); audioDisplays.drawAll();
-  drawOutputSpectrum();
   drawWave($("output-wave"), state.result?.waveform || [], $("audio").currentTime / (state.result?.duration || 1));
 }).observe(document.querySelector(".instrument"));
 new ResizeObserver(entries => {
