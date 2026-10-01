@@ -1,5 +1,6 @@
 #include "OrbitEngine.h"
 #include "OrbitSpectrum.h"
+#include "OrbitGeometry.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -222,6 +223,14 @@ void benchmark(orbit::Engine& engine) {
 }
 int main() {
     try {
+        for(int i=-20;i<=20;++i)for(int j=-20;j<=20;++j) {
+            const float x=static_cast<float>(i)/20,y=static_cast<float>(j)/20;
+            const auto disc=orbit::squareToDisc(x,y),square=orbit::discToSquare(disc[0],disc[1]);
+            require(std::hypot(disc[0],disc[1])<=1.000001f,"Every parameter combination stays inside the circular pad");
+            require(std::abs(square[0]-x)<.0005f && std::abs(square[1]-y)<.0005f,"Circular pad roundtrip retains complete parameter range");
+        }
+        const auto edge=orbit::discToSquare(5,5),projected=orbit::squareToDisc(edge[0],edge[1]);
+        require(std::abs(std::hypot(projected[0],projected[1])-1)<.00001f,"Dragging outside clamps to the circular edge");
         testFFT();
         testLongConvolution();testSpectrum();
         orbit::Engine engine;engine.prepare(48000);

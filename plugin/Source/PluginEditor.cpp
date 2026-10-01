@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "ParameterHelp.h"
+#include "OrbitGeometry.h"
 #include <BinaryData.h>
 #include <cmath>
 
@@ -97,14 +98,18 @@ void OrbitPad::mouseDrag(const juce::MouseEvent& event) { if(dragging) move(even
 void OrbitPad::mouseUp(const juce::MouseEvent& event) { finish();mouseMove(event); }
 void OrbitPad::mouseMove(const juce::MouseEvent& event) {
     const auto target=targets();
-    const juce::Point<float> handle(static_cast<float>(getWidth())*(.2f+target[0]*.6f),static_cast<float>(getHeight())*(.8f-target[2]*.6f));
+    const auto disc=orbit::squareToDisc(target[0]*2-1,1-target[2]*2);
+    const float radius=static_cast<float>(std::min(getWidth(),getHeight()))*.39f;
+    const juce::Point<float> handle(static_cast<float>(getWidth())*.5f+disc[0]*radius,static_cast<float>(getHeight())*.5f+disc[1]*radius);
     handleHovered=event.position.getDistanceFrom(handle)<22;
     setMouseCursor(handleHovered?juce::MouseCursor::PointingHandCursor:juce::MouseCursor::CrosshairCursor);
 }
 void OrbitPad::mouseExit(const juce::MouseEvent&) { handleHovered=false; }
 void OrbitPad::move(juce::Point<float> p) {
-    state.getParameter("density")->setValueNotifyingHost(juce::jlimit(0.0f,1.0f,(p.x/static_cast<float>(getWidth())-.2f)/.6f));
-    state.getParameter("pitch")->setValueNotifyingHost(juce::jlimit(0.0f,1.0f,(.8f-p.y/static_cast<float>(getHeight()))/.6f));
+    const float radius=static_cast<float>(std::min(getWidth(),getHeight()))*.39f;
+    const auto point=orbit::discToSquare((p.x-static_cast<float>(getWidth())*.5f)/radius,(p.y-static_cast<float>(getHeight())*.5f)/radius);
+    state.getParameter("density")->setValueNotifyingHost((point[0]+1)*.5f);
+    state.getParameter("pitch")->setValueNotifyingHost((1-point[1])*.5f);
     repaint();
 }
 std::array<float,7> OrbitPad::targets() const {
@@ -170,7 +175,8 @@ void OrbitPad::paint(juce::Graphics& g) {
         g.setColour(colour.withAlpha(alpha));g.strokePath(curve,juce::PathStrokeType(.65f+.25f*wet));
     }
     g.setColour(muted.withAlpha(.4f)); g.drawLine(cx-3,cy,cx+3,cy,.7f); g.drawLine(cx,cy-3,cx,cy+3,.7f);
-    const auto target=targets();const float hx=w*(.2f+target[0]*.6f),hy=h*(.8f-target[2]*.6f);
+    const auto target=targets();const auto disc=orbit::squareToDisc(target[0]*2-1,1-target[2]*2);
+    const float hx=cx+disc[0]*s*.39f,hy=cy+disc[1]*s*.39f;
     const float activity=handleActivity,radius=21+activity*7;
     juce::ColourGradient bloom(colour.withAlpha(.38f+activity*.13f),hx,hy,colour.withAlpha(0.0f),hx+radius,hy,true);
     bloom.addColour(.20,colour.withAlpha(.22f+activity*.12f));
