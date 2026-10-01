@@ -19,6 +19,8 @@ int main(int argc,char** argv) {
         processor.getStateInformation(saved);
         density->setValueNotifyingHost(0);
         reverb->setValueNotifyingHost(0);
+        processor.state.getParameter("variant")->setValueNotifyingHost(0);
+        longIr->setValueNotifyingHost(0);
         processor.setStateInformation(saved.getData(),static_cast<int>(saved.getSize()));
         require(processor.state.getRawParameterValue("density")->load()==117,"State roundtrip");
         require(std::abs(processor.state.getRawParameterValue("reverb")->load()-.72f)<.001f,"Reverb state roundtrip");
@@ -89,6 +91,17 @@ int main(int argc,char** argv) {
         processor.state.getParameter("variant")->setValueNotifyingHost(0);
         density->setValueNotifyingHost(density->convertTo0to1(80));
         reverb->setValueNotifyingHost(0);
+        processor.state.getParameter("mix")->setValueNotifyingHost(0);
+        auto* output=processor.state.getParameter("output");output->setValueNotifyingHost(output->convertTo0to1(-6));
+        processor.reset();
+        for(int i=0;i<audio.getNumSamples();++i)audio.setSample(0,i,.2f*std::sin(2*orbit::pi*750*i/48000));
+        processor.processBlock(audio,midi);captured=0;
+        while(processor.outputSpectrum.pop(frame))for(size_t i=0;i<frame.left.size();++i)
+            require(frame.left[i]==audio.getSample(0,captured++) && frame.right[i]==frame.left[i],"Output spectrum must be after gain and mono summing");
+        require(captured==audio.getNumSamples() && std::abs(audio.getSample(0,16)-.2f*std::pow(10.0f,-6.0f/20))<.00001f,"Post-gain output differs from input");
+        // Leave actual processed tone frames for the editor snapshot.
+        processor.outputSpectrum.capture(audio.getReadPointer(0),nullptr,audio.getNumSamples(),48000);
+        processor.state.getParameter("mix")->setValueNotifyingHost(.65f);
         {
             std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
             require(editor && editor->getWidth()>0,"Editor creation");
@@ -133,6 +146,25 @@ int main(int argc,char** argv) {
             }
         }
         processor.releaseResources();
+        for(int mode=1;mode<=2;++mode) {
+            processor.state.getParameter("variant")->setValueNotifyingHost(static_cast<float>(mode)*.5f);
+            std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+            juce::TextButton* navigation=nullptr;juce::Component *longControl=nullptr,*micro=nullptr,*selection=nullptr;
+            for(auto* child:editor->getChildren()) {
+                if(auto* button=dynamic_cast<juce::TextButton*>(child);button && button->getButtonText()=="Details >")navigation=button;
+                if(child->getTitle()=="Long IR")longControl=child;
+                if(child->getTitle()=="IR length")micro=child;
+                if(child->getTitle()=="Signal path")selection=child;
+            }
+            require(navigation && longControl && micro && selection,"Mode controls exist");navigation->onClick();
+            require(selection->isVisible() && !micro->isVisible() && longControl->isVisible()==(mode==1),"Details exposes only relevant mode controls");
+            if(argc>1) {
+                const juce::File original(juce::String::fromUTF8(argv[1]));
+                const auto path=original.getSiblingFile(original.getFileNameWithoutExtension()+"-details-"+juce::String(mode)+".png");
+                auto stream=path.createOutputStream();require(stream!=nullptr,"Mode screenshot output");
+                require(juce::PNGImageFormat().writeImageToStream(editor->createComponentSnapshot(editor->getLocalBounds(),true),*stream),"Mode screenshot encoding");
+            }
+        }
         std::cout<<"PASS: state restore, invalid state, oversized mono block, bypass, native editor paint/reopen\n";
         return 0;
     } catch(const std::exception& e) { std::cerr<<"FAIL: "<<e.what()<<"\n"; return 1; }

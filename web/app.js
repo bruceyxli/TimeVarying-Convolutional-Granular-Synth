@@ -52,6 +52,70 @@ function drawWave(canvas, peaks, progress = 0, colour = "#8cb8d6") {
 }
 
 let orbitVisual = null;
+// Analyze the rendered audio being played, preserving stereo energy even in antiphase.
+let spectrumAudio = null, spectrumFrame = 0;
+const spectrumLevels = new Float32Array(64);
+async function connectOutputSpectrum() {
+  if (!spectrumAudio) {
+    const context = new AudioContext();
+    const source = context.createMediaElementSource($("audio"));
+    const stereo = context.createGain();
+    stereo.channelCount = 2; stereo.channelCountMode = "explicit"; stereo.channelInterpretation = "speakers";
+    const splitter = context.createChannelSplitter(2);
+    const analyzers = [context.createAnalyser(), context.createAnalyser()];
+    analyzers.forEach((node, i) => { node.fftSize = 4096; node.smoothingTimeConstant = 0; splitter.connect(node, i); });
+    source.connect(stereo); stereo.connect(context.destination); stereo.connect(splitter);
+    spectrumAudio = { context, source, stereo, splitter, analyzers, data: analyzers.map(node => new Float32Array(node.frequencyBinCount)) };
+  }
+  await spectrumAudio.context.resume();
+}
+function drawOutputSpectrum() {
+  const { context: ctx, width: w, height: h } = fitCanvas($("output-spectrum"));
+  if (!w || !h) return;
+  const bottom = h - 18, top = 5, upper = Math.min(20000, (spectrumAudio?.context.sampleRate || 48000) / 2);
+  ctx.lineWidth = .6; ctx.strokeStyle = "#263447";
+  for (const level of [0, .5, 1]) { const y = bottom - level * (bottom - top); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+  ctx.beginPath(); ctx.moveTo(0, bottom);
+  spectrumLevels.forEach((level, i) => ctx.lineTo(i * w / 63, bottom - level * (bottom - top)));
+  ctx.lineTo(w, bottom); ctx.closePath();
+  const fill = ctx.createLinearGradient(0, top, 0, bottom); fill.addColorStop(0, "#82cfff30"); fill.addColorStop(1, "#82cfff02");
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.beginPath(); spectrumLevels.forEach((level, i) => { const x = i * w / 63, y = bottom - level * (bottom - top); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+  ctx.strokeStyle = "#82cfff"; ctx.lineWidth = 1.2; ctx.stroke();
+  ctx.fillStyle = "#91a5bc"; ctx.font = "9px Oxanium, sans-serif"; ctx.textBaseline = "bottom";
+  ctx.textAlign = "left"; ctx.fillText("20", 0, h);
+  ctx.textAlign = "center"; ctx.fillText("1k", w * Math.log(1000 / 20) / Math.log(upper / 20), h);
+  ctx.textAlign = "right"; ctx.fillText(`${Math.round(upper / 1000)}k`, w, h);
+}
+let lastSpectrumTime = 0;
+function animateOutputSpectrum(time = 0) {
+  spectrumFrame = 0;
+  if (document.hidden) return;
+  const playing = spectrumAudio && !$("audio").paused && !$("audio").ended;
+  if (time - lastSpectrumTime >= 30 || !time) {
+    lastSpectrumTime = time;
+    if (playing) spectrumAudio.analyzers.forEach((node, i) => node.getFloatFrequencyData(spectrumAudio.data[i]));
+    const rate = spectrumAudio?.context.sampleRate || 48000, upper = Math.min(20000, rate / 2);
+    spectrumLevels.forEach((level, i) => {
+      let peak = -90;
+      if (playing) {
+        const first = Math.max(1, Math.floor(20 * Math.pow(upper / 20, i / 64) * 4096 / rate));
+        const last = Math.min(2047, Math.ceil(20 * Math.pow(upper / 20, (i + 1) / 64) * 4096 / rate));
+        for (let bin = first; bin <= last; bin++) {
+          const power = (Math.pow(10, spectrumAudio.data[0][bin] / 10) + Math.pow(10, spectrumAudio.data[1][bin] / 10)) / 2;
+          peak = Math.max(peak, 10 * Math.log10(Math.max(power, 1e-12)));
+        }
+      }
+      const target = clamp((peak + 90) / 90, 0, 1);
+      spectrumLevels[i] = level + (target - level) * (target > level ? .65 : .16);
+      if (spectrumLevels[i] < .001) spectrumLevels[i] = 0;
+    });
+    drawOutputSpectrum();
+  }
+  if (playing || spectrumLevels.some(level => level > 0)) spectrumFrame = requestAnimationFrame(animateOutputSpectrum);
+}
+function scheduleSpectrum() { if (!spectrumFrame) spectrumFrame = requestAnimationFrame(animateOutputSpectrum); }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) scheduleSpectrum(); });
 const orbitTargets = () => [(value("density") - 10) / 110, (value("grain") - 5) / 45, value("pitch") / 12, value("wet"), value("reverb")];
 function drawOrbit() {
   const { context: ctx, width: w, height: h } = fitCanvas($("orbit-art"));
@@ -337,7 +401,7 @@ function setDetailsPage(open) {
   $("detail-toggle").innerHTML = open ? '<span aria-hidden="true">←</span> Back' : 'Details <span aria-hidden="true">→</span>';
   window.scrollTo({top:0,behavior:"instant"});
   if (open) $("details-title").focus({preventScroll:true});
-  else { $("detail-toggle").focus({preventScroll:true}); scheduleDraw();drawWave($("source-wave"), state.sourceWave); }
+  else { $("detail-toggle").focus({preventScroll:true}); scheduleDraw();drawWave($("source-wave"), state.sourceWave); drawOutputSpectrum(); }
 }
 $("detail-toggle").addEventListener("click", () => setDetailsPage($("detail-panel").hidden));
 $("upload-button").addEventListener("click", () => $("source-file").click());
@@ -351,13 +415,14 @@ $("drop-zone").addEventListener("drop", (event) => {
 });
 $("render").addEventListener("click", render);
 $("play").addEventListener("click", async () => {
-  try { if ($("audio").paused) await $("audio").play(); else $("audio").pause(); }
+  try { if ($("audio").paused) { await connectOutputSpectrum(); await $("audio").play(); } else $("audio").pause(); }
   catch { message("Playback could not start. Try rendering again.", true); }
 });
 function playbackUI() {
   const playing = !$("audio").paused;
   $("play").textContent = playing ? "Ⅱ" : "▶";
   $("play").setAttribute("aria-label", playing ? "Pause rendered audio" : "Play rendered audio");
+  scheduleSpectrum();
 }
 $("audio").addEventListener("play", playbackUI);
 $("audio").addEventListener("pause", playbackUI);
@@ -397,8 +462,12 @@ const releaseXY = () => { pointer = null; $("orbit-pad").classList.remove("is-dr
 $("orbit-pad").addEventListener("pointerleave", () => $("orbit-pad").classList.remove("handle-hover"));
 new ResizeObserver(() => {
   scheduleDraw(); drawWave($("source-wave"), state.sourceWave);
+  drawOutputSpectrum();
   drawWave($("output-wave"), state.result?.waveform || [], $("audio").currentTime / (state.result?.duration || 1));
 }).observe(document.querySelector(".instrument"));
+new ResizeObserver(entries => {
+  if (entries[0].target.offsetHeight) document.querySelector(".workspace").style.setProperty("--source-height", `${entries[0].target.offsetHeight}px`);
+}).observe($("drop-zone"));
 
 async function start() {
   updateUI(false);
@@ -424,6 +493,7 @@ start();
 // One lightweight tooltip; descriptions are also available to screen readers.
 function installParameterHelp() {
   const descriptions = {
+    "output-spectrum": "Output Spectrum\nFrequency energy of the rendered output during playback, including Reverb. Low frequencies are on the left; high frequencies are on the right. The display settles to silence when playback stops.",
     "density": "Density\nGrains triggered per second. Higher values create a denser texture; lower values leave more space.",
     "grain": "Grain Size\nThe duration of each grain. Short grains sound more fragmented; longer grains retain more of the source.",
     "pitch": "Pitch Scatter\nRandom pitch variation per grain, in semitones. Zero keeps the original pitch.",

@@ -138,7 +138,8 @@ void OutputSpectrum::paint(juce::Graphics& g) {
     g.setColour(blue);g.strokePath(trace,juce::PathStrokeType(1.1f));
     g.setFont(look.font(9));g.setColour(muted);
     g.drawText("20",0,getHeight()-13,35,13,juce::Justification::left);
-    g.drawText("1k",getWidth()/2, getHeight()-13,35,13,juce::Justification::centred);
+    const float maximum=std::min(20000.0f,static_cast<float>(analyzer.sampleRate()*.5));
+    g.drawText("1k",static_cast<int>(w*std::log(1000.0f/20)/std::log(maximum/20))-17,getHeight()-13,35,13,juce::Justification::centred);
     const auto upper=juce::String(std::min(20.0,analyzer.sampleRate()*.0005),0)+"k";
     g.drawText(upper,getWidth()-40,getHeight()-13,40,13,juce::Justification::right);
 }
