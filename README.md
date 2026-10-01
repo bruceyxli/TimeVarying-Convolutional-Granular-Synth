@@ -15,6 +15,8 @@ artifacts. DAW-specific session testing remains a release requirement.
 
 The lightweight offline web interface can be started with
 `python -m src.app.web --port 56628`. Open the printed local address.
+Its right OUTPUT spectrum follows the rendered audio during playback; the left
+source waveform remains in place. The native counterpart analyzes live DAW output.
 
 Both interfaces provide **Save** beside the preset selector: name the current sound,
 then recall it from **User**. Presets include all parameters, including Reverb and

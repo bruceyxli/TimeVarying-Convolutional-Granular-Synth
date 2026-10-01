@@ -1,5 +1,48 @@
 # ORBIT native validation — 2026-09-30
 
+## 0.5.0 — three native IR paths and output spectrum
+
+- Native source commit: `4889cd7056e09b85af45fad4af2ab18d25a010b0`.
+- Windows build: https://github.com/bruceyxli/TimeVarying-Convolutional-Granular-Synth/actions/runs/36797031444
+- Release x64 VST3/standalone build, both native test suites and pluginval 1.0.4
+  strictness 5 passed in CI. DSP and host checks also passed locally.
+- VST3 SHA-256: `EBEC2A6718D9F551BA4CD94ABE0F0A53317103918D4ECF08D5C93B2C363EA42A`.
+- Variant A's partitioned convolution matches independent direct convolution at
+  40, 125 and 300 ms, including its 256-sample wet-path delay and complete tail.
+  Changing Long IR changes audio; leaving/returning to A does not replay stale history.
+- A/B pass exact block invariance, silence, non-silent wet output, direct dry and
+  bypass checks. B's source-derived convolution passes the double-polarity inversion
+  identity. All three paths remain finite/bounded at 44.1/48/96/192 kHz; mode and
+  Long IR automation were exercised. The tested audio paths allocate no heap memory.
+- Session recall includes both appended parameters. Old sessions and version-1
+  presets migrate to Standard / 120 ms; incomplete version-2 presets are rejected.
+  Mode-specific native controls and all three Details screenshots were checked.
+- Spectrum tests recover a known antiphase stereo tone's frequency and level,
+  reject distant bands, reset on sample-rate changes and silence, and exercise full
+  queue recovery. Host checks compare captured spectrum frames to the actual final
+  mono output after gain. FFT analysis runs on the editor thread.
+- Web: actual rendered playback drives the symmetric right spectrum; left waveform
+  remains intact. Playback, return to silence, all three mode controls and existing
+  user-preset recall were checked. No browser console errors. Five preset tests and
+  23 Python tests passed. Web FFT uses the browser's analyzer window, so spectral
+  heights are not calibrated identically to the native Hann-window display.
+
+Local AMD Ryzen 7 9800X3D, one DSP instance, 48 kHz, 64 samples, 3,000 blocks per
+mode; 120 grains/s, 50 ms grains, ±12 st, 32 ms micro-IR, 300 ms Long IR, full Reverb:
+
+| Mode | p50 (us) | p95 (us) | p99 (us) | Max (us) | Deadline misses |
+|---|---:|---:|---:|---:|---:|
+| Standard | 2.2 | 229.5 | 296.4 | 446.5 | 0 / 3000 |
+| A | 2.6 | 120.7 | 171.9 | 215.6 | 0 / 3000 |
+| B | 2.2 | 625.1 | 708.5 | 906.4 | 0 / 3000 |
+
+The block deadline is 1333.33 us. B has the highest burst cost. These short DSP-only
+measurements exclude the host/editor and do not establish high-rate, multi-instance
+or long-session safety. Actual DAW session/soak and listening comparisons remain
+pending. Native modes retain a common direct Dry/Wet endpoint and differ from the
+offline reference in normalization, historical source capture and generated IRs.
+Custom IR import remains outside the native build.
+
 ## 0.4.3 — English descriptions
 
 - Native source commit: `c1678ba4cd84bab468a42fed1add23a5e98a5678`.
@@ -155,6 +198,6 @@ heavy automation, multiple instances and long sessions require further measureme
 
 Real FL Studio/Ableton/REAPER sessions: playback, record monitoring, project reload,
 automation, bounce, bypass, sample-rate changes, GUI resizing and long-session load.
-Also pending: measured listening/reference comparisons, Variant A/B and custom IR
+Also pending: measured listening/reference comparisons and custom IR
 import. The native Standard effect intentionally differs from Python; see the
 plugin README for the source-history, interpolation, RNG and output-ceiling changes.
