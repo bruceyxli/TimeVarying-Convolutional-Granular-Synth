@@ -17,6 +17,12 @@ The lightweight offline web interface can be started with
 `python -m src.app.web --port 56628`. Open the printed local address.
 Its right OUTPUT spectrum follows the rendered audio during playback; the left
 source waveform remains in place. The native counterpart analyzes live DAW output.
+Click either graph to cycle **Waveform → Spectrum → Spectrogram** independently.
+The three-position selector above the ring controls **PER GRAIN / PRE CONV / GRAIN IR**
+and morphs the ring's shape. The XY handle stays within a circular field while
+retaining the full Density and Pitch ranges. Reverb still controls colour and glow.
+In the web preview, the input analyzer loops the decoded source silently alongside
+rendered playback; it is a source preview rather than the native live DAW feed.
 
 Both interfaces provide **Save** beside the preset selector: name the current sound,
 then recall it from **User**. Presets include all parameters, including Reverb and

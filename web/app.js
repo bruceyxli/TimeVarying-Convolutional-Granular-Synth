@@ -52,71 +52,9 @@ function drawWave(canvas, peaks, progress = 0, colour = "#8cb8d6") {
 }
 
 let orbitVisual = null;
-// Analyze the rendered audio being played, preserving stereo energy even in antiphase.
-let spectrumAudio = null, spectrumFrame = 0;
-const spectrumLevels = new Float32Array(64);
-async function connectOutputSpectrum() {
-  if (!spectrumAudio) {
-    const context = new AudioContext();
-    const source = context.createMediaElementSource($("audio"));
-    const stereo = context.createGain();
-    stereo.channelCount = 2; stereo.channelCountMode = "explicit"; stereo.channelInterpretation = "speakers";
-    const splitter = context.createChannelSplitter(2);
-    const analyzers = [context.createAnalyser(), context.createAnalyser()];
-    analyzers.forEach((node, i) => { node.fftSize = 4096; node.smoothingTimeConstant = 0; splitter.connect(node, i); });
-    source.connect(stereo); stereo.connect(context.destination); stereo.connect(splitter);
-    spectrumAudio = { context, source, stereo, splitter, analyzers, data: analyzers.map(node => new Float32Array(node.frequencyBinCount)) };
-  }
-  await spectrumAudio.context.resume();
-}
-function drawOutputSpectrum() {
-  const { context: ctx, width: w, height: h } = fitCanvas($("output-spectrum"));
-  if (!w || !h) return;
-  const bottom = h - 18, top = 5, upper = Math.min(20000, (spectrumAudio?.context.sampleRate || 48000) / 2);
-  ctx.lineWidth = .6; ctx.strokeStyle = "#263447";
-  for (const level of [0, .5, 1]) { const y = bottom - level * (bottom - top); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
-  ctx.beginPath(); ctx.moveTo(0, bottom);
-  spectrumLevels.forEach((level, i) => ctx.lineTo(i * w / 63, bottom - level * (bottom - top)));
-  ctx.lineTo(w, bottom); ctx.closePath();
-  const fill = ctx.createLinearGradient(0, top, 0, bottom); fill.addColorStop(0, "#82cfff30"); fill.addColorStop(1, "#82cfff02");
-  ctx.fillStyle = fill; ctx.fill();
-  ctx.beginPath(); spectrumLevels.forEach((level, i) => { const x = i * w / 63, y = bottom - level * (bottom - top); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
-  ctx.strokeStyle = "#82cfff"; ctx.lineWidth = 1.2; ctx.stroke();
-  ctx.fillStyle = "#91a5bc"; ctx.font = "9px Oxanium, sans-serif"; ctx.textBaseline = "bottom";
-  ctx.textAlign = "left"; ctx.fillText("20", 0, h);
-  ctx.textAlign = "center"; ctx.fillText("1k", w * Math.log(1000 / 20) / Math.log(upper / 20), h);
-  ctx.textAlign = "right"; ctx.fillText(`${Math.round(upper / 1000)}k`, w, h);
-}
-let lastSpectrumTime = 0;
-function animateOutputSpectrum(time = 0) {
-  spectrumFrame = 0;
-  if (document.hidden) return;
-  const playing = spectrumAudio && !$("audio").paused && !$("audio").ended;
-  if (time - lastSpectrumTime >= 30 || !time) {
-    lastSpectrumTime = time;
-    if (playing) spectrumAudio.analyzers.forEach((node, i) => node.getFloatFrequencyData(spectrumAudio.data[i]));
-    const rate = spectrumAudio?.context.sampleRate || 48000, upper = Math.min(20000, rate / 2);
-    spectrumLevels.forEach((level, i) => {
-      let peak = -90;
-      if (playing) {
-        const first = Math.max(1, Math.floor(20 * Math.pow(upper / 20, i / 64) * 4096 / rate));
-        const last = Math.min(2047, Math.ceil(20 * Math.pow(upper / 20, (i + 1) / 64) * 4096 / rate));
-        for (let bin = first; bin <= last; bin++) {
-          const power = (Math.pow(10, spectrumAudio.data[0][bin] / 10) + Math.pow(10, spectrumAudio.data[1][bin] / 10)) / 2;
-          peak = Math.max(peak, 10 * Math.log10(Math.max(power, 1e-12)));
-        }
-      }
-      const target = clamp((peak + 90) / 90, 0, 1);
-      spectrumLevels[i] = level + (target - level) * (target > level ? .65 : .16);
-      if (spectrumLevels[i] < .001) spectrumLevels[i] = 0;
-    });
-    drawOutputSpectrum();
-  }
-  if (playing || spectrumLevels.some(level => level > 0)) spectrumFrame = requestAnimationFrame(animateOutputSpectrum);
-}
-function scheduleSpectrum() { if (!spectrumFrame) spectrumFrame = requestAnimationFrame(animateOutputSpectrum); }
-document.addEventListener("visibilitychange", () => { if (!document.hidden) scheduleSpectrum(); });
-const orbitTargets = () => [(value("density") - 10) / 110, (value("grain") - 5) / 45, value("pitch") / 12, value("wet"), value("reverb")];
+const audioDisplays = new OrbitAudioDisplays($("audio"));
+const drawOutputSpectrum = () => audioDisplays.drawAll();
+const orbitTargets = () => [(value("density") - 10) / 110, (value("grain") - 5) / 45, value("pitch") / 12, value("wet"), value("reverb"), $("variant").value === "variant_a" ? 1 : 0, $("variant").value === "variant_b" ? 1 : 0];
 function drawOrbit() {
   const { context: ctx, width: w, height: h } = fitCanvas($("orbit-art"));
   if (!w || !h) return;
@@ -128,7 +66,7 @@ function drawOrbit() {
     if (Math.abs(next - target[i]) < .001) return target[i];
     settling = true; return next;
   });
-  const [x, grain, y, wet, space] = orbitVisual;
+  const [x, grain, y, wet, space, pre, self] = orbitVisual;
   const tint = Math.sqrt(space), rgb = [255 - 150 * tint, 255 - 64 * tint, 255].map(Math.round);
   const colour = (alpha) => `rgba(${rgb.join(",")},${alpha})`;
   $("orbit-pad").style.setProperty("--halo-colour", colour(1));
@@ -160,8 +98,12 @@ function drawOrbit() {
       const wave = (Math.sin(a * 3 + phase * 1.4 + x * 2) * .019
         + Math.sin(a * 5 - phase + y * 3) * .012) * s * (.25 + y * 1.3);
       const twist = a + Math.sin(phase + a * 2) * (.035 + x * .075);
-      const px = cx + Math.cos(twist) * (radius + wave) + Math.sin(phase) * s * .012;
-      const py = cy + Math.sin(twist) * (radius + wave) * (.95 + .03 * Math.cos(phase));
+      const normal = 1 - pre - self;
+      const flow = radius + s * .012 * Math.sin(a * 2 + phase * .55 + x) * (.5 + y);
+      const petal = radius * (.9 + .15 * Math.cos(3 * a)) + s * .022 * Math.sin(6 * a + phase) * (.3 + y);
+      const preAngle = a + .2 * Math.sin(phase * .5), selfAngle = a + .1 * Math.sin(3 * a + phase);
+      const px = cx + normal * (Math.cos(twist) * (radius + wave) + Math.sin(phase) * s * .012) + pre * Math.cos(preAngle) * flow * 1.08 + self * Math.cos(selfAngle) * petal;
+      const py = cy + normal * Math.sin(twist) * (radius + wave) * (.95 + .03 * Math.cos(phase)) + pre * Math.sin(preAngle) * flow * .72 + self * Math.sin(selfAngle) * petal;
       if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.closePath();
@@ -174,8 +116,9 @@ function drawOrbit() {
   }
   ctx.strokeStyle = "#607f9f"; ctx.lineWidth = .6;
   ctx.beginPath(); ctx.moveTo(cx - 4, cy); ctx.lineTo(cx + 4, cy); ctx.moveTo(cx, cy - 4); ctx.lineTo(cx, cy + 4); ctx.stroke();
-  $("xy-handle").style.left = `${(0.2 + target[0] * .6) * 100}%`;
-  $("xy-handle").style.top = `${(0.8 - target[2] * .6) * 100}%`;
+  const disc = OrbitGeometry.squareToDisc(target[0] * 2 - 1, 1 - target[2] * 2);
+  $("xy-handle").style.left = `${cx + disc[0] * s * .39}px`;
+  $("xy-handle").style.top = `${cy + disc[1] * s * .39}px`;
   if (settling) scheduleDraw();
 }
 
@@ -208,6 +151,7 @@ function updateUI(changed = true) {
     input.style.setProperty("--fill", `${(Number(input.value) - Number(input.min)) / (Number(input.max) - Number(input.min)) * 100}%`);
   });
   const variant = $("variant").value;
+  document.querySelectorAll("[data-variant]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.variant === variant)));
   $("micro-ir-controls").hidden = variant !== "standard";
   $("long-ir-controls").hidden = variant !== "variant_a";
   if (changed) {
@@ -282,13 +226,17 @@ function cyclePreset(direction) {
 function setSource(name, info, isDemo) {
   state.sourceId = info.source_id || null;
   state.sourceWave = info.waveform;
+  $("audio").pause();state.result = null;$("play").disabled = true;$("seek").disabled = true;
+  $("download").removeAttribute("href");$("download").setAttribute("aria-disabled","true");
+  audioDisplays.setSource(info.audio_url || "/api/source-audio/demo", info.waveform);
+  audioDisplays.setOutput([]);
   $("source-name").textContent = name;
   $("source-name").title = name;
   $("source-kind").textContent = isDemo ? "DEMO" : "FILE";
   $("source-meta").textContent = `${info.duration.toFixed(1)} s`;
   $("use-demo").hidden = isDemo;
   $("duration").value = Math.round(clamp(info.duration, 2, 40) * 10) / 10;
-  drawWave($("source-wave"), state.sourceWave);
+  audioDisplays.drawAll();
   updateUI();
 }
 
@@ -343,12 +291,16 @@ async function render() {
     $("download").setAttribute("aria-disabled", "false");
     $("download").title = `24-bit stereo WAV · ${result.sample_rate} Hz · ${result.peak_db} dBFS peak`;
     drawWave($("output-wave"), result.waveform);
+    audioDisplays.setOutput(result.waveform);
     message(state.revision === revision ? "Ready" : "Modified · render to update");
   } catch (error) { message(error.message, true); }
   finally { state.busy = false; setButtons(); }
 }
 
 controls.forEach((id) => $(id).addEventListener("input", () => updateUI()));
+document.querySelectorAll("[data-variant]").forEach(button => button.addEventListener("click", () => {
+  $("variant").value = button.dataset.variant; updateUI();
+}));
 // Keep real range inputs for keyboard/assistive control, add fine pointer movement.
 ["density", "grain", "pitch", "wet", "reverb"].forEach((id) => {
   const input = $(id), initial = input.defaultValue;
@@ -401,7 +353,7 @@ function setDetailsPage(open) {
   $("detail-toggle").innerHTML = open ? '<span aria-hidden="true">←</span> Back' : 'Details <span aria-hidden="true">→</span>';
   window.scrollTo({top:0,behavior:"instant"});
   if (open) $("details-title").focus({preventScroll:true});
-  else { $("detail-toggle").focus({preventScroll:true}); scheduleDraw();drawWave($("source-wave"), state.sourceWave); drawOutputSpectrum(); }
+  else { $("detail-toggle").focus({preventScroll:true}); scheduleDraw();audioDisplays.drawAll(); drawOutputSpectrum(); }
 }
 $("detail-toggle").addEventListener("click", () => setDetailsPage($("detail-panel").hidden));
 $("upload-button").addEventListener("click", () => $("source-file").click());
@@ -415,14 +367,14 @@ $("drop-zone").addEventListener("drop", (event) => {
 });
 $("render").addEventListener("click", render);
 $("play").addEventListener("click", async () => {
-  try { if ($("audio").paused) { await connectOutputSpectrum(); await $("audio").play(); } else $("audio").pause(); }
+  try { if ($("audio").paused) { await audioDisplays.prepare(); await $("audio").play(); } else $("audio").pause(); }
   catch { message("Playback could not start. Try rendering again.", true); }
 });
 function playbackUI() {
   const playing = !$("audio").paused;
   $("play").textContent = playing ? "Ⅱ" : "▶";
   $("play").setAttribute("aria-label", playing ? "Pause rendered audio" : "Play rendered audio");
-  scheduleSpectrum();
+  audioDisplays.schedule();
 }
 $("audio").addEventListener("play", playbackUI);
 $("audio").addEventListener("pause", playbackUI);
@@ -442,8 +394,9 @@ $("seek").addEventListener("input", () => { if (state.result) $("audio").current
 let pointer = null;
 function moveXY(event) {
   const rect = $("orbit-pad").getBoundingClientRect();
-  const x = clamp(((event.clientX - rect.left) / rect.width - .2) / .6, 0, 1);
-  const y = clamp((.8 - (event.clientY - rect.top) / rect.height) / .6, 0, 1);
+  const radius = Math.min(rect.width, rect.height) * .39;
+  const point = OrbitGeometry.discToSquare((event.clientX - rect.left - rect.width / 2) / radius, (event.clientY - rect.top - rect.height / 2) / radius);
+  const x = (point[0] + 1) / 2, y = (1 - point[1]) / 2;
   $("density").value = Math.round(10 + x * 110); $("pitch").value = (y * 12).toFixed(1);
   updateUI();
 }
@@ -461,7 +414,7 @@ const releaseXY = () => { pointer = null; $("orbit-pad").classList.remove("is-dr
 ["pointerup", "pointercancel", "lostpointercapture"].forEach((name) => $("orbit-pad").addEventListener(name, releaseXY));
 $("orbit-pad").addEventListener("pointerleave", () => $("orbit-pad").classList.remove("handle-hover"));
 new ResizeObserver(() => {
-  scheduleDraw(); drawWave($("source-wave"), state.sourceWave);
+  scheduleDraw(); audioDisplays.drawAll();
   drawOutputSpectrum();
   drawWave($("output-wave"), state.result?.waveform || [], $("audio").currentTime / (state.result?.duration || 1));
 }).observe(document.querySelector(".instrument"));
@@ -493,7 +446,8 @@ start();
 // One lightweight tooltip; descriptions are also available to screen readers.
 function installParameterHelp() {
   const descriptions = {
-    "output-spectrum": "Output Spectrum\nFrequency energy of the rendered output during playback, including Reverb. Low frequencies are on the left; high frequencies are on the right. The display settles to silence when playback stops.",
+    "input-plot": "Input View\nClick to cycle Waveform, Spectrum and Spectrogram. During playback, the source loops silently alongside the rendered output. The waveform shows an overview when paused. Spectrogram: time moves right, frequency rises upward, and brighter means louder.",
+    "output-plot": "Output View\nClick to cycle Waveform, Spectrum and Spectrogram. Analyzes actual rendered playback, including Reverb. Both displays use matching scales. Spectrogram: time moves right, frequency rises upward, and brighter means louder.",
     "density": "Density\nGrains triggered per second. Higher values create a denser texture; lower values leave more space.",
     "grain": "Grain Size\nThe duration of each grain. Short grains sound more fragmented; longer grains retain more of the source.",
     "pitch": "Pitch Scatter\nRandom pitch variation per grain, in semitones. Zero keeps the original pitch.",
@@ -509,7 +463,7 @@ function installParameterHelp() {
     "long-ir": "Long IR\nThe impulse response duration in Convolve then Granulate mode. Longer responses create a more pronounced tail.",
     "duration": "Duration\nThe total length of the rendered audio, in seconds.",
     "sample-rate": "Sample Rate\nThe output sample rate. Higher rates increase processing time and file size.",
-    "orbit-pad": "XY Pad\nMove horizontally to change Density and vertically to change Pitch Scatter. The side sliders control the same parameters."
+    "orbit-pad": "XY Pad\nDrag inside the circular field to change Density and Pitch Scatter. The full parameter ranges map into the circle; dragging outside stays on its edge. The side sliders control the same parameters."
   };
 
   const tooltip = document.createElement("div");

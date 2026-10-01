@@ -144,7 +144,17 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/api/bootstrap":
             return self.respond({"presets": PRESETS, "source": {"name": "Harmonic drift", "duration": 10,
+                                 "audio_url": "/api/source-audio/demo",
                                  "waveform": waveform(demo_source(48000))}})
+        if path.startswith("/api/source-audio/"):
+            try:
+                token = path.rsplit("/", 1)[1]
+                source = demo_source(48000) if token == "demo" else decode_audio(self.server.lookup(self.server.sources, token), 48000)
+                buffer = io.BytesIO()
+                sf.write(buffer, source, 48000, format="WAV", subtype="FLOAT")
+                return self.respond(buffer.getvalue(), "audio/wav")
+            except (ValueError, RuntimeError, OSError) as exc:
+                return self.respond({"error": str(exc)}, status=404)
         if path.startswith("/api/audio/"):
             try:
                 return self.respond(self.server.lookup(self.server.renders, path.rsplit("/", 1)[1]), "audio/wav")
@@ -152,6 +162,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond({"error": str(exc)}, status=404)
         files = {"/": ("index.html", "text/html; charset=utf-8"),
                  "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+                 "/audio-displays.js": ("audio-displays.js", "text/javascript; charset=utf-8"),
+                 "/orbit-geometry.js": ("orbit-geometry.js", "text/javascript; charset=utf-8"),
                  "/preset-store.js": ("preset-store.js", "text/javascript; charset=utf-8"),
                  "/style.css": ("style.css", "text/css; charset=utf-8"),
                  "/fonts/oxanium.ttf": ("fonts/oxanium.ttf", "font/ttf")}
@@ -182,6 +194,7 @@ class Handler(BaseHTTPRequestHandler):
                 source = decode_audio(payload, 48000)
                 token = self.server.store(self.server.sources, payload)
                 return self.respond({"source_id": token, "duration": info.duration,
+                                     "audio_url": f"/api/source-audio/{token}",
                                      "waveform": waveform(source)})
             data = json.loads(payload)
             if not self.server.render_lock.acquire(blocking=False):

@@ -6,6 +6,8 @@
   <title>ORBIT — Granular instrument</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/preset-store.js" defer></script>
+  <script src="/orbit-geometry.js" defer></script>
+  <script src="/audio-displays.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -28,9 +30,11 @@
     <section class="workspace" aria-label="Instrument controls">
       <aside class="control-column left-column">
         <div class="source-block" id="drop-zone">
-          <div class="source-heading"><h1 id="source-name">Harmonic drift</h1><span id="source-kind">DEMO</span></div>
-          <p id="source-meta">10.0 s</p>
-          <canvas id="source-wave" class="source-wave" role="img" aria-label="Source audio peak waveform"></canvas>
+          <button type="button" class="visualizer" id="input-plot" aria-label="INPUT visualization: Waveform">
+            <span class="plot-heading"><span>INPUT</span><span id="input-view-mode">WAVEFORM ›</span></span>
+            <canvas id="source-wave" class="source-wave" aria-hidden="true"></canvas>
+          </button>
+          <div class="source-heading"><h1 id="source-name">Harmonic drift</h1><span id="source-kind">DEMO</span><p id="source-meta">10.0 s</p></div>
           <button class="import-button" id="upload-button"><span>＋</span> Import</button>
           <input type="file" id="source-file" accept=".wav,.flac,.aiff,.aif,.ogg" hidden>
           <button class="text-button demo-button" id="use-demo" hidden>Use demo</button>
@@ -47,6 +51,11 @@
       </aside>
 
       <section class="orbit-column" aria-label="XY sound exploration">
+        <div class="mode-switch" role="group" aria-label="Convolution mode">
+          <button type="button" data-variant="standard" aria-pressed="true" title="Per-grain convolution: each grain uses a short IR.">PER GRAIN</button>
+          <button type="button" data-variant="variant_a" aria-pressed="false" title="Convolve then Granulate: a long IR filters the source before grain capture.">PRE CONV</button>
+          <button type="button" data-variant="variant_b" aria-pressed="false" title="Grains as IR: source segments excite pitched grains used as impulse responses.">GRAIN IR</button>
+        </div>
         <div class="orbit-stage" id="orbit-pad" role="group" aria-label="XY pad: horizontal density, vertical pitch scatter. Use the Density and Pitch Scatter sliders for keyboard control.">
           <canvas id="orbit-art" aria-hidden="true"></canvas>
           <span id="xy-handle" class="xy-handle" aria-hidden="true"></span>
@@ -59,8 +68,10 @@
 
       <aside class="control-column right-column">
         <div class="output-block">
-          <h2>OUTPUT</h2>
-          <canvas id="output-spectrum" role="img" aria-label="Live output frequency spectrum during playback"></canvas>
+          <button type="button" class="visualizer" id="output-plot" aria-label="OUTPUT visualization: Spectrum">
+            <span class="plot-heading"><span>OUTPUT</span><span id="output-view-mode">SPECTRUM ›</span></span>
+            <canvas id="output-spectrum" aria-hidden="true"></canvas>
+          </button>
         </div>
         <div class="parameter main-parameter">
           <div class="parameter-heading"><label for="pitch">PITCH SCATTER</label><span class="axis">Y</span></div>
