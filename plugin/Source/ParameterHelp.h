@@ -18,7 +18,7 @@ inline juce::String orbitParameterHelp(const juce::String& id) {
     if(id=="strategy")return "IR Selection\nChooses a response for each grain: fixed, cycling, random, weighted, or matched by spectral centroid.";
     if(id=="seed")return "Random Seed\nChanges the random sequence. The same input, seed and starting state reproduce the same variation.";
     if(id=="bypass")return "Bypass\nPasses the original input through, skipping the grain effect, reverb and output gain.";
-    if(id=="xy")return "XY Pad\nMove horizontally to change Density and vertically to change Pitch Scatter. The side sliders control the same parameters.";
+    if(id=="xy")return "XY Pad\nDrag in the circular field: X controls Density and Y controls Grain Size. Up increases grain duration. Pitch Scatter is independent. Dragging outside stays on the circular boundary.";
     if(id=="input")return "Live Input\nShows the left and right input waveforms from your host. The clip indicator lights up when input peaks reach full scale.";
     return {};
 }

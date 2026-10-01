@@ -1,6 +1,46 @@
 #pragma once
 #include "PluginProcessor.h"
 #include "UserPresetStore.h"
+#include <cstdlib>
+#include <cmath>
+
+class ParameterReadout final : public juce::Label {
+public:
+    void bind(juce::AudioProcessorValueTreeState& state,const char* id,float displayScale,int places) {
+        parameter=state.getParameter(id);raw=state.getRawParameterValue(id);scale=displayScale;decimals=places;
+        setEditable(false,true,true);setWantsKeyboardFocus(true);setMouseCursor(juce::MouseCursor::IBeamCursor);
+        setBorderSize(juce::BorderSize<int>(0));
+        onTextChange=[this]{commit(getText());setText(formatted(),juce::dontSendNotification);};sync();
+    }
+    bool commit(const juce::String& input) {
+        const auto clean=input.trim();const auto bytes=clean.toRawUTF8();char* end=nullptr;
+        const double number=std::strtod(bytes,&end);
+        if(clean.isEmpty() || end==bytes || *end!='\0' || !std::isfinite(number))return false;
+        const auto& range=parameter->getNormalisableRange();
+        const auto bounded=static_cast<float>(std::clamp(number/static_cast<double>(scale),static_cast<double>(range.start),static_cast<double>(range.end)));
+        parameter->beginChangeGesture();parameter->setValueNotifyingHost(parameter->convertTo0to1(range.snapToLegalValue(bounded)));parameter->endChangeGesture();
+        sync();return true;
+    }
+    void sync() { if(raw && !isBeingEdited())setText(formatted(),juce::dontSendNotification); }
+    bool keyPressed(const juce::KeyPress& key) override {
+        if(key==juce::KeyPress::returnKey || key==juce::KeyPress::spaceKey){showEditor();return true;}
+        return juce::Label::keyPressed(key);
+    }
+protected:
+    juce::TextEditor* createEditorComponent() override {
+        auto* editor=juce::Label::createEditorComponent();editor->setInputRestrictions(12,"0123456789.-+");
+        editor->setFont(getFont());editor->setJustification(juce::Justification::centredLeft);
+        editor->setColour(juce::TextEditor::backgroundColourId,juce::Colour(0xff121c29));
+        editor->setColour(juce::TextEditor::textColourId,juce::Colour(0xffdfebf8));
+        editor->setColour(juce::TextEditor::focusedOutlineColourId,juce::Colour(0xff82cfff));
+        return editor;
+    }
+private:
+    juce::String formatted() const {return juce::String(raw->load()*scale,decimals);}
+    juce::RangedAudioParameter* parameter=nullptr;
+    std::atomic<float>* raw=nullptr;
+    float scale=1;int decimals=0;
+};
 
 struct PresetCombo : juce::ComboBox {
     std::function<void()> onOpen;
@@ -19,7 +59,7 @@ struct OrbitLook : juce::LookAndFeel_V4 {
     juce::Font font(float size) const;
     juce::Font getComboBoxFont(juce::ComboBox&) override { return font(14); }
     juce::Font getTextButtonFont(juce::TextButton&,int) override { return font(12); }
-    juce::Font getLabelFont(juce::Label&) override { return font(12); }
+    juce::Font getLabelFont(juce::Label& label) override { return dynamic_cast<ParameterReadout*>(&label)?label.getFont():font(12); }
     void drawLinearSlider(juce::Graphics&,int,int,int,int,float,float,float,juce::Slider::SliderStyle,juce::Slider&) override;
     void drawRotarySlider(juce::Graphics&,int,int,int,int,float,float,float,juce::Slider&) override;
 };
@@ -85,6 +125,7 @@ private:
     AudioDisplay scope,spectrum;
     OrbitPad pad;
     juce::Slider density,grain,pitch,mix,jitter,spread,lookback,output,seed,reverb,longIr;
+    std::array<ParameterReadout,4> readouts;
     PresetCombo preset;
     juce::ComboBox ir,strategy,variant;
     std::array<juce::TextButton,3> modeButtons;

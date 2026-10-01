@@ -110,6 +110,30 @@ int main(int argc,char** argv) {
         {
             std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
             require(editor && editor->getWidth()>0,"Editor creation");
+            std::array<ParameterReadout*,4> values{};
+            for(auto* child:editor->getChildren())if(auto* readout=dynamic_cast<ParameterReadout*>(child)) {
+                if(readout->getTitle()=="Density value")values[0]=readout;
+                if(readout->getTitle()=="Grain size value")values[1]=readout;
+                if(readout->getTitle()=="Pitch scatter value")values[2]=readout;
+                if(readout->getTitle()=="Dry wet value")values[3]=readout;
+            }
+            for(auto* value:values)require(value!=nullptr,"All four primary numeric readouts exist");
+            const auto beforeNumeric=UserPresetStore::capture(processor.state);
+            require(values[0]->commit("99.5") && processor.state.getRawParameterValue("density")->load()==100,"Numeric entry snaps to density step");
+            require(values[1]->commit("12.34") && std::abs(processor.state.getRawParameterValue("grain")->load()-12.3f)<.001f,"Decimal grain entry");
+            require(values[2]->commit("999") && processor.state.getRawParameterValue("pitch")->load()==12,"Numeric entry clamps upper bound");
+            require(values[1]->commit("-50") && processor.state.getRawParameterValue("grain")->load()==5,"Numeric entry clamps lower bound");
+            require(values[3]->commit("37.5") && std::abs(processor.state.getRawParameterValue("mix")->load()-.375f)<.001f,"Dry wet entry uses percent");
+            require(!values[0]->commit("nonsense") && !values[0]->commit("nan") && !values[0]->commit(""),"Invalid numeric entries rejected");
+            require(processor.state.getRawParameterValue("density")->load()==100,"Invalid input preserves parameter");
+            values[0]->showEditor();require(values[0]->getCurrentTextEditor()!=nullptr,"Numeric editor opens");
+            values[0]->getCurrentTextEditor()->setText("88");values[0]->hideEditor(false);
+            require(processor.state.getRawParameterValue("density")->load()==88,"Confirm edit notifies parameter");
+            values[0]->showEditor();values[0]->getCurrentTextEditor()->setText("40");values[0]->hideEditor(true);
+            require(processor.state.getRawParameterValue("density")->load()==88,"Cancel edit preserves parameter");
+            require(UserPresetStore::apply({"restore",beforeNumeric},processor.state),"Restore numeric fixture");
+            for(auto* value:values)value->sync();
+            require(values[0]->getText()=="80" && values[1]->getText()=="15.0","Readouts follow external parameter recall");
             auto snapshot=editor->createComponentSnapshot(editor->getLocalBounds(),true);
             require(snapshot.isValid(),"Native editor rendering");
             AudioDisplay *inputDisplay=nullptr,*outputDisplay=nullptr;

@@ -82,23 +82,23 @@ void OrbitLook::drawRotarySlider(juce::Graphics& g,int x,int y,int width,int hei
 OrbitPad::OrbitPad(juce::AudioProcessorValueTreeState& s):state(s) {
     visual=targets();setBufferedToImage(true);
     setMouseCursor(juce::MouseCursor::CrosshairCursor);
-    setTitle("XY: density and pitch scatter");
-    setDescription("Use the Density and Pitch sliders for keyboard control.");
+    setTitle("XY: density and grain size");
+    setDescription("Use the Density and Grain Size sliders for keyboard control.");
 }
 OrbitPad::~OrbitPad() { finish(); }
 void OrbitPad::finish() {
-    if(dragging) { state.getParameter("density")->endChangeGesture(); state.getParameter("pitch")->endChangeGesture(); dragging=false; }
+    if(dragging) { state.getParameter("density")->endChangeGesture(); state.getParameter("grain")->endChangeGesture(); dragging=false; }
 }
 void OrbitPad::mouseDown(const juce::MouseEvent& event) {
     if(!event.mods.isLeftButtonDown()) return;
     finish(); dragging=true;
-    state.getParameter("density")->beginChangeGesture(); state.getParameter("pitch")->beginChangeGesture(); move(event.position);
+    state.getParameter("density")->beginChangeGesture(); state.getParameter("grain")->beginChangeGesture(); move(event.position);
 }
 void OrbitPad::mouseDrag(const juce::MouseEvent& event) { if(dragging) move(event.position); }
 void OrbitPad::mouseUp(const juce::MouseEvent& event) { finish();mouseMove(event); }
 void OrbitPad::mouseMove(const juce::MouseEvent& event) {
     const auto target=targets();
-    const auto disc=orbit::squareToDisc(target[0]*2-1,1-target[2]*2);
+    const auto disc=orbit::squareToDisc(target[0]*2-1,1-target[1]*2);
     const float radius=static_cast<float>(std::min(getWidth(),getHeight()))*.39f;
     const juce::Point<float> handle(static_cast<float>(getWidth())*.5f+disc[0]*radius,static_cast<float>(getHeight())*.5f+disc[1]*radius);
     handleHovered=event.position.getDistanceFrom(handle)<22;
@@ -109,7 +109,7 @@ void OrbitPad::move(juce::Point<float> p) {
     const float radius=static_cast<float>(std::min(getWidth(),getHeight()))*.39f;
     const auto point=orbit::discToSquare((p.x-static_cast<float>(getWidth())*.5f)/radius,(p.y-static_cast<float>(getHeight())*.5f)/radius);
     state.getParameter("density")->setValueNotifyingHost((point[0]+1)*.5f);
-    state.getParameter("pitch")->setValueNotifyingHost((1-point[1])*.5f);
+    state.getParameter("grain")->setValueNotifyingHost((1-point[1])*.5f);
     repaint();
 }
 std::array<float,7> OrbitPad::targets() const {
@@ -175,7 +175,7 @@ void OrbitPad::paint(juce::Graphics& g) {
         g.setColour(colour.withAlpha(alpha));g.strokePath(curve,juce::PathStrokeType(.65f+.25f*wet));
     }
     g.setColour(muted.withAlpha(.4f)); g.drawLine(cx-3,cy,cx+3,cy,.7f); g.drawLine(cx,cy-3,cx,cy+3,.7f);
-    const auto target=targets();const auto disc=orbit::squareToDisc(target[0]*2-1,1-target[2]*2);
+    const auto target=targets();const auto disc=orbit::squareToDisc(target[0]*2-1,1-target[1]*2);
     const float hx=cx+disc[0]*s*.39f,hy=cy+disc[1]*s*.39f;
     const float activity=handleActivity,radius=21+activity*7;
     juce::ColourGradient bloom(colour.withAlpha(.38f+activity*.13f),hx,hy,colour.withAlpha(0.0f),hx+radius,hy,true);
@@ -220,6 +220,15 @@ OrbitEditor::OrbitEditor(OrbitProcessor& p):AudioProcessorEditor(p),processor(p)
     attach(jitter,"jitter","Trigger jitter",true); attach(spread,"spread","Stereo spread",true);
     attach(lookback,"lookback","Lookback",true); attach(output,"output","Output gain",true); attach(seed,"seed","Random seed",true);
     attach(longIr,"longIr","Long IR",true);longIr.setTextValueSuffix(" ms");
+    const char* readoutIds[]{"density","grain","pitch","mix"};
+    const char* readoutNames[]{"Density value","Grain size value","Pitch scatter value","Dry wet value"};
+    for(size_t i=0;i<readouts.size();++i) {
+        auto& readout=readouts[i];readout.bind(p.state,readoutIds[i],i==3?100.0f:1.0f,i==0?0:1);
+        readout.setTitle(readoutNames[i]);readout.setName(readoutNames[i]);readout.setFont(look.font(44));
+        readout.setColour(juce::Label::textColourId,text);readout.setJustificationType(juce::Justification::centredLeft);
+        readout.setTooltip(orbitParameterHelp(readoutIds[i])+"\nDouble-click the number to type a value. Enter confirms; Escape or clicking away cancels.");
+        addAndMakeVisible(readout);
+    }
     grain.setTextValueSuffix(" ms"); pitch.setTextValueSuffix(" st"); lookback.setTextValueSuffix(" ms"); output.setTextValueSuffix(" dB");
     ir.addItemList({"8 ms","16 ms","24 ms","32 ms"},1);
     strategy.addItemList({"Fixed","Cycle","Random","Weighted","Centroid"},1);
@@ -283,7 +292,7 @@ juce::String OrbitEditor::getTooltip() {
         return {};
     }
     if(hit(40,255,220,102))return orbitParameterHelp("density");
-    if(hit(40,380,220,63))return orbitParameterHelp("grain");
+    if(hit(40,380,220,103))return orbitParameterHelp("grain");
     if(hit(735,255,220,102))return orbitParameterHelp("pitch");
     if(hit(735,375,220,100))return orbitParameterHelp("mix");
     if(hit(440,503,170,58))return orbitParameterHelp("reverb");
@@ -291,6 +300,7 @@ juce::String OrbitEditor::getTooltip() {
 }
 void OrbitEditor::setExpanded(bool open) {
     expanded=open;
+    for(auto& readout:readouts){readout.hideEditor(true);readout.setVisible(!open);}
     for(auto* c:std::initializer_list<juce::Component*>{&jitter,&spread,&lookback,&output,&seed,&variant}) c->setVisible(open);
     for(auto* c:std::initializer_list<juce::Component*>{&scope,&spectrum,&pad,&density,&grain,&pitch,&mix}) c->setVisible(!open);
     for(auto& button:modeButtons)button.setVisible(!open);
@@ -359,6 +369,7 @@ void OrbitEditor::timerCallback() {
         if(v!=previousValues[i]) { previousValues[i]=v; changed=true; }
     }
     if(changed) { syncPreset(); updateModeControls();repaint(); }
+    for(auto& readout:readouts)readout.sync();
     pad.updateVisuals();
 }
 void OrbitEditor::resized() {
@@ -372,8 +383,11 @@ void OrbitEditor::resized() {
     inPanel(cancelSave,183,117,72,28);inPanel(confirmSave,268,117,72,28);
     place(scope,45,116,210,106);place(spectrum,740,116,210,106); place(pad,288,146,420,340);
     for(size_t i=0;i<modeButtons.size();++i)place(modeButtons[i],333+static_cast<int>(i)*110,110,110,30);
-    place(density,40,330,220,26); place(grain,40,416,220,26);
-    place(pitch,735,330,220,26); place(mix,735,450,220,26);
+    place(density,40,330,220,26); place(grain,40,454,220,26);
+    place(pitch,735,330,220,26); place(mix,735,454,220,26);
+    place(readouts[0],45,280,132,48);place(readouts[1],45,404,132,48);
+    place(readouts[2],740,280,132,48);place(readouts[3],740,404,145,48);
+    for(auto& readout:readouts)readout.setFont(look.font(44*s));
     place(details,865,28,95,32);
     place(reverb,445,503,58,58);
     place(jitter,40,265,265,30); place(spread,40,356,265,30);place(seed,40,447,265,30);
@@ -408,14 +422,10 @@ void OrbitEditor::paint(juce::Graphics& graphics) {
     }
     g.setColour(line);g.drawHorizontalLine(497,40,960);
     label("DENSITY",45,259,180,20,11,muted); label("X",239,259,16,20,10,muted);
-    label(juce::String(density.getValue(),0),45,280,95,48,44);label("grains/s",142,300,75,20,11,muted);
-    label("GRAIN SIZE",45,383,125,20,11,muted);label(juce::String(grain.getValue(),1)+" ms",170,383,85,20,11,muted,juce::Justification::right);
-    label("PITCH SCATTER",740,259,180,20,11,muted);label("Y",939,259,16,20,10,muted);
-    label("+/-",740,296,36,25,16,blue);label(juce::String(pitch.getValue(),1),779,280,132,50,42);label("st",916,304,35,20,11,muted);
-    juce::Path arc;arc.addCentredArc(781,407,32,32,0,orbit::pi*1.25f,orbit::pi*(1.25f+1.5f*static_cast<float>(mix.getValue())),true);
-    g.setColour(line);g.drawEllipse(749,375,64,64,2);g.setColour(blue);g.strokePath(arc,juce::PathStrokeType(2));
-    label(juce::String(mix.getValue()*100,0),751,385,60,34,29,text,juce::Justification::centred);label("%",774,419,20,12,9,muted,juce::Justification::centred);
-    label("DRY / WET",840,395,116,24,11,muted);
+    label("grains/s",182,303,75,20,11,muted);
+    label("GRAIN SIZE",45,383,180,20,11,muted);label("Y",239,383,16,20,10,muted);label("ms",182,427,75,20,11,muted);
+    label("PITCH SCATTER",740,259,180,20,11,muted);label("st",889,303,64,20,11,muted);
+    label("DRY / WET",740,383,180,20,11,muted);label("%",889,427,64,20,11,muted);
     label("REVERB",513,513,95,17,10,muted);
     label(reverb.getValue()<.0005?"OFF":juce::String(reverb.getValue()*100,0)+"%",513,532,85,20,15,reverb.getValue()>0?blue:text);
     label("VST3",916,561,44,20,10,muted,juce::Justification::right);

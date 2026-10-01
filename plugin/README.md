@@ -32,12 +32,16 @@ Hover over a parameter, its label or readout for about half a second to see a
 short English description. The same help covers the XY pad, input scope, bypass
 and advanced controls. Tooltips use the interface's dark, cool-colour palette.
 
-- XY pad: horizontal Density, vertical Pitch Scatter. The adjacent sliders are
+- XY pad: horizontal Density, vertical Grain Size. The adjacent sliders are
   keyboard-accessible alternatives; all controls notify the DAW for automation.
 - The three-position switch above the ring selects **PER GRAIN**, **PRE CONV** (A)
   or **GRAIN IR** (B). The existing Details selector remains synchronized, including
   host automation and preset recall. The ring morphs from ripples to elliptical
   flow to a three-lobed shape; its white/blue colour still depends only on Reverb.
+- The four main parameters use matching large numeric readouts, units and faders.
+  Double-click a number (or focus it and press Enter) to type. Enter confirms;
+  Escape/clicking away cancels. Values clamp to the parameter range and snap to its
+  step; Dry/Wet is entered as 0–100%. Host automation and presets update the readouts.
 - Grain size: 5–50 ms; density: 10–120 grains/s; pitch: random ±0–12 semitones.
 - Dry / Wet crossfades direct input with processed grains. There is no Render button.
 - Reverb adds a damped stereo room after the granular mix. Its dedicated compact
