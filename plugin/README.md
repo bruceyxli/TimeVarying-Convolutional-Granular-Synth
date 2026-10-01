@@ -4,6 +4,11 @@ Native C++17/JUCE audio effect with the minimal, cold-blue ORBIT interface.
 The left INPUT display receives live DAW input, with separate L/R envelopes,
 fixed amplitude scale and clipping indication. The symmetric right OUTPUT display
 shows a logarithmic spectrum of the actual final output, including Reverb and gain.
+Click either display (or focus it and press Enter/Space) to cycle independently
+through Waveform, Spectrum and Spectrogram. The small label shows the selected view.
+Both sides use the same amplitude/frequency scales; spectrogram time moves right,
+frequency rises upward, and brightness indicates level. View choices survive editor
+reopening and session recall without changing sound presets.
 No browser, Python process or
 internet connection is needed by the compiled plugin.
 
@@ -29,6 +34,10 @@ and advanced controls. Tooltips use the interface's dark, cool-colour palette.
 
 - XY pad: horizontal Density, vertical Pitch Scatter. The adjacent sliders are
   keyboard-accessible alternatives; all controls notify the DAW for automation.
+- The three-position switch above the ring selects **PER GRAIN**, **PRE CONV** (A)
+  or **GRAIN IR** (B). The existing Details selector remains synchronized, including
+  host automation and preset recall. The ring morphs from ripples to elliptical
+  flow to a three-lobed shape; its white/blue colour still depends only on Reverb.
 - Grain size: 5–50 ms; density: 10–120 grains/s; pitch: random ±0–12 semitones.
 - Dry / Wet crossfades direct input with processed grains. There is no Render button.
 - Reverb adds a damped stereo room after the granular mix. Its dedicated compact

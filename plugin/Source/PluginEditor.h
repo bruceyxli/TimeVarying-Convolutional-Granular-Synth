@@ -24,31 +24,30 @@ struct OrbitLook : juce::LookAndFeel_V4 {
     void drawRotarySlider(juce::Graphics&,int,int,int,int,float,float,float,juce::Slider&) override;
 };
 
-class InputScope final : public juce::Component, public juce::SettableTooltipClient, private juce::Timer {
+// Both displays use the same scales and can be cycled independently.
+class AudioDisplay final : public juce::Button, private juce::Timer {
 public:
-    InputScope(orbit::ScopeQueue&,OrbitLook&);
-    void paint(juce::Graphics&) override;
+    AudioDisplay(orbit::OutputQueue&,OrbitLook&,std::atomic<int>&,const juce::String&);
+    void paintButton(juce::Graphics&,bool,bool) override;
+    int viewMode() const noexcept { return mode.load(); }
+    void refresh();
 private:
     void timerCallback() override;
-    orbit::ScopeQueue& queue;
-    OrbitLook& look;
-    std::array<orbit::ScopeFrame,256> history{};
-    size_t head=0;
-    double lastFrame=0;
-    bool stale=true;
-};
-
-class OutputSpectrum final : public juce::Component, public juce::SettableTooltipClient, private juce::Timer {
-public:
-    OutputSpectrum(orbit::OutputQueue&,OrbitLook&);
-    void paint(juce::Graphics&) override;
-private:
-    void timerCallback() override;
+    void updateHelp();
     orbit::OutputQueue& queue;
     OrbitLook& look;
+    std::atomic<int>& mode;
+    juce::String caption;
     orbit::SpectrumAnalyzer analyzer;
     std::array<float,64> levels{};
-    double lastData=0;
+    std::array<orbit::ScopeFrame,256> waveform{};
+    orbit::ScopeFrame partial{};
+    int waveHead=0,waveCount=0,spectroHead=0,emptyColumns=192;
+    int helpMode=-1;
+    bool waveEmpty=true;
+    uint32_t generation=~uint32_t{0};
+    double rate=0,lastData=0;
+    juce::Image spectrogram{juce::Image::RGB,192,64,true};
 };
 
 class OrbitPad final : public juce::Component, public juce::SettableTooltipClient {
@@ -67,8 +66,8 @@ private:
     bool dragging=false;
     bool handleHovered=false;
     float handleActivity=0;
-    std::array<float,5> visual{};
-    std::array<float,5> targets() const;
+    std::array<float,7> visual{};
+    std::array<float,7> targets() const;
     void move(juce::Point<float>);
     void finish();
 };
@@ -83,12 +82,12 @@ public:
 private:
     OrbitProcessor& processor;
     OrbitLook look;
-    InputScope scope;
-    OutputSpectrum spectrum;
+    AudioDisplay scope,spectrum;
     OrbitPad pad;
     juce::Slider density,grain,pitch,mix,jitter,spread,lookback,output,seed,reverb,longIr;
     PresetCombo preset;
     juce::ComboBox ir,strategy,variant;
+    std::array<juce::TextButton,3> modeButtons;
     UserPresetStore presetStore;
     std::vector<UserPresetStore::Entry> userPresets;
     juce::TextButton savePreset{"Save"},confirmSave{"Save"},cancelSave{"Cancel"};

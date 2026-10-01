@@ -9,7 +9,7 @@ public:
     const juce::String getName() const override { return "ORBIT"; }
     void prepareToPlay(double sampleRate, int maximumBlock) override;
     void releaseResources() override {}
-    void reset() override { engine.reset();outputSpectrum.reset(); }
+    void reset() override { engine.reset();inputSpectrum.reset();outputSpectrum.reset(); }
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     void processBlockBypassed(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     bool isBusesLayoutSupported(const BusesLayout&) const override;
@@ -30,7 +30,8 @@ public:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
     juce::AudioProcessorValueTreeState state;
     orbit::Engine engine;
-    orbit::OutputQueue outputSpectrum;
+    orbit::OutputQueue inputSpectrum,outputSpectrum;
+    std::atomic<int> inputView{0},outputView{1}; // Presentation state, not sound parameters.
 private:
     enum Index { density, grain, pitch, mix, jitter, spread, lookback, output, ir, strategy, seed, bypass, reverb, variant, longIr, count };
     std::array<std::atomic<float>*, count> values{};

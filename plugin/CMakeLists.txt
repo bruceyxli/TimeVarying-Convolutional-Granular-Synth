@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Orbit VERSION 0.5.0 LANGUAGES C CXX)
+project(Orbit VERSION 0.6.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -35,7 +35,7 @@ if(ORBIT_BUILD_PLUGIN)
         IS_MIDI_EFFECT FALSE EDITOR_WANTS_KEYBOARD_FOCUS FALSE
         VST3_CATEGORIES Fx Granular
         COPY_PLUGIN_AFTER_BUILD FALSE)
-    target_sources(Orbit PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp)
+    target_sources(Orbit PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp Source/AudioDisplay.cpp)
     target_compile_definitions(Orbit PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0)
     target_link_libraries(Orbit PRIVATE orbit_dsp OrbitAssets

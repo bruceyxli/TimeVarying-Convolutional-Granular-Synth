@@ -78,72 +78,6 @@ void OrbitLook::drawRotarySlider(juce::Graphics& g,int x,int y,int width,int hei
     g.setColour(colour);g.drawLine(centre.x+std::cos(angle)*radius*.38f,centre.y+std::sin(angle)*radius*.38f,centre.x+std::cos(angle)*radius*.68f,centre.y+std::sin(angle)*radius*.68f,2);
 }
 
-InputScope::InputScope(orbit::ScopeQueue& q,OrbitLook& l):queue(q),look(l) { startTimerHz(30); }
-void InputScope::timerCallback() {
-    orbit::ScopeFrame frame;
-    bool changed=false;
-    while(queue.pop(frame)) { history[head]=frame; head=(head+1)%history.size(); changed=true; }
-    const auto now=juce::Time::getMillisecondCounterHiRes();
-    if(changed) { lastFrame=now; stale=false; repaint(); }
-    else if(!stale && now-lastFrame>1000) { history.fill({}); stale=true; repaint(); }
-}
-void InputScope::paint(juce::Graphics& g) {
-    g.fillAll(background);
-    g.setFont(look.font(11)); g.setColour(muted); g.drawText("INPUT",0,0,getWidth(),18,juce::Justification::left);
-    const float w=static_cast<float>(getWidth()),height=static_cast<float>(getHeight()-28),top=26;
-    bool clip=false;
-    for(int channel=0;channel<2;++channel) {
-        const float centre=top+height*(channel==0?.25f:.75f),amplitude=height*.21f;
-        g.setColour(line); g.drawHorizontalLine(static_cast<int>(centre),0,w);
-        g.setColour(channel==0?blue:cyan.withAlpha(.7f));
-        for(size_t i=0;i<history.size();++i) {
-            const auto& f=history[(head+i)%history.size()];
-            const float low=channel==0?f.minL:f.minR,high=channel==0?f.maxL:f.maxR;
-            clip=clip || low<=-1 || high>=1;
-            const float x=static_cast<float>(i)*w/static_cast<float>(history.size());
-            g.drawLine(x,centre-juce::jlimit(-1.0f,1.0f,high)*amplitude,x,centre-juce::jlimit(-1.0f,1.0f,low)*amplitude,1);
-        }
-    }
-    if(clip) { g.setColour(juce::Colour{0xfff29ab3}); g.fillEllipse(w-6,5,4,4); }
-}
-
-OutputSpectrum::OutputSpectrum(orbit::OutputQueue& q,OrbitLook& l):queue(q),look(l) {timerCallback();startTimerHz(30);}
-void OutputSpectrum::timerCallback() {
-    orbit::OutputFrame frame;bool received=false;
-    while(queue.pop(frame)){analyzer.append(frame);received=true;}
-    const auto now=juce::Time::getMillisecondCounterHiRes();
-    if(received){analyzer.analyze();lastData=now;}
-    const bool stale=now-lastData>250;
-    const float maximum=std::min(20000.0f,static_cast<float>(analyzer.sampleRate()*.5));
-    bool changed=false;
-    for(size_t i=0;i<levels.size();++i) {
-        const float low=20*std::pow(maximum/20,static_cast<float>(i)/64);
-        const float high=20*std::pow(maximum/20,static_cast<float>(i+1)/64);
-        const float target=stale?0:juce::jlimit(0.0f,1.0f,(analyzer.level(low,high)+90)/90);
-        auto& value=levels[i];const float next=value+(target-value)*(target>value?.65f:.16f);
-        if(std::abs(next-value)>.0001f){value=next;changed=true;}else value=target;
-    }
-    if(changed || received)repaint();
-}
-void OutputSpectrum::paint(juce::Graphics& g) {
-    g.fillAll(background);g.setFont(look.font(11));g.setColour(muted);g.drawText("OUTPUT",0,0,getWidth(),18,juce::Justification::left);
-    const float w=static_cast<float>(getWidth()),top=27,bottom=static_cast<float>(getHeight()-17),height=bottom-top;
-    g.setColour(line);
-    for(int i=0;i<3;++i)g.drawHorizontalLine(static_cast<int>(top+height*static_cast<float>(i)/2),0,w);
-    juce::Path trace;trace.startNewSubPath(0,bottom-levels[0]*height);
-    for(size_t i=1;i<levels.size();++i)trace.lineTo(static_cast<float>(i)*w/63,bottom-levels[i]*height);
-    auto fill=trace;fill.lineTo(w,bottom);fill.lineTo(0,bottom);fill.closeSubPath();
-    g.setGradientFill(juce::ColourGradient(blue.withAlpha(.24f),0,top,blue.withAlpha(.01f),0,bottom,false));g.fillPath(fill);
-    g.setColour(blue.withAlpha(.13f));g.strokePath(trace,juce::PathStrokeType(4));
-    g.setColour(blue);g.strokePath(trace,juce::PathStrokeType(1.1f));
-    g.setFont(look.font(9));g.setColour(muted);
-    g.drawText("20",0,getHeight()-13,35,13,juce::Justification::left);
-    const float maximum=std::min(20000.0f,static_cast<float>(analyzer.sampleRate()*.5));
-    g.drawText("1k",static_cast<int>(w*std::log(1000.0f/20)/std::log(maximum/20))-17,getHeight()-13,35,13,juce::Justification::centred);
-    const auto upper=juce::String(std::min(20.0,analyzer.sampleRate()*.0005),0)+"k";
-    g.drawText(upper,getWidth()-40,getHeight()-13,40,13,juce::Justification::right);
-}
-
 OrbitPad::OrbitPad(juce::AudioProcessorValueTreeState& s):state(s) {
     visual=targets();setBufferedToImage(true);
     setMouseCursor(juce::MouseCursor::CrosshairCursor);
@@ -173,10 +107,10 @@ void OrbitPad::move(juce::Point<float> p) {
     state.getParameter("pitch")->setValueNotifyingHost(juce::jlimit(0.0f,1.0f,(.8f-p.y/static_cast<float>(getHeight()))/.6f));
     repaint();
 }
-std::array<float,5> OrbitPad::targets() const {
+std::array<float,7> OrbitPad::targets() const {
     auto value=[this](const char* id){return state.getRawParameterValue(id)->load();};
     const bool bypassed=value("bypass")>.5f;
-    return {{(value("density")-10)/110,(value("grain")-5)/45,value("pitch")/12,value("mix"),bypassed?0:value("reverb")}};
+    return {{(value("density")-10)/110,(value("grain")-5)/45,value("pitch")/12,value("mix"),bypassed?0:value("reverb"),value("variant")==1?1.0f:0.0f,value("variant")==2?1.0f:0.0f}};
 }
 void OrbitPad::updateVisuals() {
     const auto target=targets();bool changed=false;
@@ -220,8 +154,12 @@ void OrbitPad::paint(juce::Graphics& g) {
             const float a=static_cast<float>(j)/160*2*orbit::pi;
             const float wave=(std::sin(a*3+phase*1.4f+x*2)*.019f+std::sin(a*5-phase+y*3)*.012f)*s*(.25f+y*1.3f);
             const float twist=a+std::sin(phase+a*2)*(.035f+x*.075f);
-            const float px=cx+std::cos(twist)*(radius+wave)+std::sin(phase)*s*.012f;
-            const float py=cy+std::sin(twist)*(radius+wave)*(.95f+.03f*std::cos(phase));
+            const float pre=visual[5],self=visual[6],normal=1-pre-self;
+            const float flow=radius+s*.012f*std::sin(a*2+phase*.55f+x)*(.5f+y);
+            const float petal=radius*(.9f+.15f*std::cos(3*a))+s*.022f*std::sin(6*a+phase)*(.3f+y);
+            const float preAngle=a+.2f*std::sin(phase*.5f),selfAngle=a+.1f*std::sin(3*a+phase);
+            const float px=cx+normal*(std::cos(twist)*(radius+wave)+std::sin(phase)*s*.012f)+pre*std::cos(preAngle)*flow*1.08f+self*std::cos(selfAngle)*petal;
+            const float py=cy+normal*std::sin(twist)*(radius+wave)*(.95f+.03f*std::cos(phase))+pre*std::sin(preAngle)*flow*.72f+self*std::sin(selfAngle)*petal;
             if(j==0) curve.startNewSubPath(px,py); else curve.lineTo(px,py);
         }
         const float alpha=(.20f+.48f*std::sin(t*orbit::pi))*(.65f+.35f*wet)*visibility;
@@ -253,7 +191,7 @@ void OrbitPad::paint(juce::Graphics& g) {
     g.setColour(juce::Colours::white.withAlpha(.95f));g.fillEllipse(hx-2,hy-2.5f,2.4f,2.4f);
 }
 
-OrbitEditor::OrbitEditor(OrbitProcessor& p):AudioProcessorEditor(p),processor(p),scope(p.engine.scope,look),spectrum(p.outputSpectrum,look),pad(p.state) {
+OrbitEditor::OrbitEditor(OrbitProcessor& p):AudioProcessorEditor(p),processor(p),scope(p.inputSpectrum,look,p.inputView,"INPUT"),spectrum(p.outputSpectrum,look,p.outputView,"OUTPUT"),pad(p.state) {
     setLookAndFeel(&look); setOpaque(true);
     auto attach=[&](juce::Slider& slider,const char* id,const char* name,bool small=false) {
         slider.setSliderStyle(juce::Slider::LinearHorizontal);
@@ -284,8 +222,16 @@ OrbitEditor::OrbitEditor(OrbitProcessor& p):AudioProcessorEditor(p),processor(p)
     ir.setTitle("IR length"); strategy.setTitle("IR selection"); preset.setTitle("Preset");
     ir.setTooltip(orbitParameterHelp("ir"));strategy.setTooltip(orbitParameterHelp("strategy"));
     bypass.setTooltip(orbitParameterHelp("bypass"));pad.setTooltip(orbitParameterHelp("xy"));
-    scope.setTooltip(orbitParameterHelp("input"));
-    spectrum.setTooltip(orbitParameterHelp("spectrum"));
+    const char* modeLabels[]{"PER GRAIN","PRE CONV","GRAIN IR"};
+    const char* modeHelp[]{"Per-grain convolution: each grain uses a short IR.","Convolve then Granulate: a long IR filters the input before grain capture.","Grains as IR: source segments excite pitched grains used as impulse responses."};
+    for(size_t i=0;i<modeButtons.size();++i) {
+        auto& button=modeButtons[i];button.setButtonText(modeLabels[i]);button.setTitle(modeLabels[i]);
+        button.setTooltip(modeHelp[i]);button.setClickingTogglesState(true);button.setRadioGroupId(100);
+        button.setConnectedEdges(i==0?juce::Button::ConnectedOnRight:(i==2?juce::Button::ConnectedOnLeft:juce::Button::ConnectedOnLeft|juce::Button::ConnectedOnRight));
+        button.setColour(juce::TextButton::buttonOnColourId,blue.withAlpha(.12f));button.setColour(juce::TextButton::textColourOnId,blue);
+        button.onClick=[this,i]{auto* parameter=processor.state.getParameter("variant");parameter->beginChangeGesture();parameter->setValueNotifyingHost(static_cast<float>(i)*.5f);parameter->endChangeGesture();updateModeControls();};
+        addAndMakeVisible(button);
+    }
     preset.setTextWhenNothingSelected("Custom");
     for(auto* c:std::initializer_list<juce::Component*>{&scope,&spectrum,&pad,&preset,&ir,&strategy,&variant,&previous,&next,&details,&bypass,&savePreset}) addAndMakeVisible(c);
     addChildComponent(savePanel);
@@ -341,6 +287,7 @@ void OrbitEditor::setExpanded(bool open) {
     expanded=open;
     for(auto* c:std::initializer_list<juce::Component*>{&jitter,&spread,&lookback,&output,&seed,&variant}) c->setVisible(open);
     for(auto* c:std::initializer_list<juce::Component*>{&scope,&spectrum,&pad,&density,&grain,&pitch,&mix}) c->setVisible(!open);
+    for(auto& button:modeButtons)button.setVisible(!open);
     updateModeControls();
     details.setButtonText(open?"< Back":"Details >");
     const int height=620;
@@ -351,6 +298,7 @@ void OrbitEditor::setExpanded(bool open) {
 }
 void OrbitEditor::updateModeControls() {
     const int mode=juce::roundToInt(processor.state.getRawParameterValue("variant")->load());
+    for(size_t i=0;i<modeButtons.size();++i)modeButtons[i].setToggleState(static_cast<int>(i)==mode,juce::dontSendNotification);
     ir.setVisible(expanded && mode==0);strategy.setVisible(expanded && mode==0);longIr.setVisible(expanded && mode==1);
 }
 void OrbitEditor::applyPreset(int index) {
@@ -416,7 +364,8 @@ void OrbitEditor::resized() {
     auto inPanel=[&](juce::Component& c,int x,int y,int w,int h){c.setBounds(juce::roundToInt(x*panelScale),juce::roundToInt(y*panelScale),juce::roundToInt(w*panelScale),juce::roundToInt(h*panelScale));};
     inPanel(savePrompt,18,10,320,24);inPanel(presetName,20,42,320,32);inPanel(saveError,18,78,324,28);
     inPanel(cancelSave,183,117,72,28);inPanel(confirmSave,268,117,72,28);
-    place(scope,45,116,210,106);place(spectrum,740,116,210,106); place(pad,288,99,420,388);
+    place(scope,45,116,210,106);place(spectrum,740,116,210,106); place(pad,288,146,420,340);
+    for(size_t i=0;i<modeButtons.size();++i)place(modeButtons[i],333+static_cast<int>(i)*110,110,110,30);
     place(density,40,330,220,26); place(grain,40,416,220,26);
     place(pitch,735,330,220,26); place(mix,735,450,220,26);
     place(details,865,28,95,32);

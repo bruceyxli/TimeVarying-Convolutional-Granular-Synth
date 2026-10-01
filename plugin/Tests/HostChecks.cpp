@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "PluginEditor.h"
 #include "UserPresetStore.h"
 #include <iostream>
 #include <stdexcept>
@@ -15,16 +16,19 @@ int main(int argc,char** argv) {
         processor.state.getParameter("variant")->setValueNotifyingHost(.5f);
         auto* longIr=processor.state.getParameter("longIr");
         longIr->setValueNotifyingHost(longIr->convertTo0to1(235));
+        processor.inputView.store(2);processor.outputView.store(0);
         juce::MemoryBlock saved;
         processor.getStateInformation(saved);
         density->setValueNotifyingHost(0);
         reverb->setValueNotifyingHost(0);
         processor.state.getParameter("variant")->setValueNotifyingHost(0);
         longIr->setValueNotifyingHost(0);
+        processor.inputView.store(0);processor.outputView.store(1);
         processor.setStateInformation(saved.getData(),static_cast<int>(saved.getSize()));
         require(processor.state.getRawParameterValue("density")->load()==117,"State roundtrip");
         require(std::abs(processor.state.getRawParameterValue("reverb")->load()-.72f)<.001f,"Reverb state roundtrip");
         require(processor.state.getRawParameterValue("variant")->load()==1 && processor.state.getRawParameterValue("longIr")->load()==235,"IR mode state roundtrip");
+        require(processor.inputView.load()==2 && processor.outputView.load()==0,"Display modes survive session recall");
         auto legacy=processor.state.copyState();
         for(const auto* id:{"variant","longIr"})legacy.removeChild(legacy.getChildWithProperty("id",id),nullptr);
         juce::MemoryBlock legacyData;
@@ -102,11 +106,49 @@ int main(int argc,char** argv) {
         // Leave actual processed tone frames for the editor snapshot.
         processor.outputSpectrum.capture(audio.getReadPointer(0),nullptr,audio.getNumSamples(),48000);
         processor.state.getParameter("mix")->setValueNotifyingHost(.65f);
+        processor.inputView.store(0);processor.outputView.store(1);
         {
             std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
             require(editor && editor->getWidth()>0,"Editor creation");
             auto snapshot=editor->createComponentSnapshot(editor->getLocalBounds(),true);
             require(snapshot.isValid(),"Native editor rendering");
+            AudioDisplay *inputDisplay=nullptr,*outputDisplay=nullptr;
+            std::array<juce::TextButton*,3> modes{};
+            for(auto* child:editor->getChildren()) {
+                if(auto* display=dynamic_cast<AudioDisplay*>(child)) {
+                    if(child->getTitle()=="INPUT visualization")inputDisplay=display;else outputDisplay=display;
+                }
+                if(auto* button=dynamic_cast<juce::TextButton*>(child)) {
+                    if(button->getButtonText()=="PER GRAIN")modes[0]=button;
+                    if(button->getButtonText()=="PRE CONV")modes[1]=button;
+                    if(button->getButtonText()=="GRAIN IR")modes[2]=button;
+                }
+            }
+            require(inputDisplay && outputDisplay && modes[0] && modes[1] && modes[2],"Main-page visualization and signal-path controls");
+            const auto beforeViews=UserPresetStore::capture(processor.state);
+            inputDisplay->onClick();require(inputDisplay->viewMode()==1 && outputDisplay->viewMode()==1,"Input cycles independently");
+            inputDisplay->onClick();outputDisplay->onClick();
+            require(inputDisplay->viewMode()==2 && outputDisplay->viewMode()==2,"Spectrogram selectable on both sides");
+            require(UserPresetStore::matches({"views",beforeViews},processor.state),"Display switching never changes sound parameters");
+            for(int frameIndex=0;frameIndex<96;++frameIndex) {
+                processor.inputSpectrum.capture(audio.getReadPointer(0),nullptr,audio.getNumSamples(),48000);
+                processor.outputSpectrum.capture(audio.getReadPointer(0),nullptr,audio.getNumSamples(),48000);
+                inputDisplay->refresh();outputDisplay->refresh();
+            }
+            for(int mode=0;mode<3;++mode) {
+                modes[static_cast<size_t>(mode)]->onClick();
+                require(processor.state.getRawParameterValue("variant")->load()==mode,"Main switch drives the automatable signal-path parameter");
+                for(auto* child:editor->getChildren())if(auto* orbitPad=dynamic_cast<OrbitPad*>(child))for(int step=0;step<30;++step)orbitPad->updateVisuals();
+                if(argc>1) {
+                    const juce::File original(juce::String::fromUTF8(argv[1]));
+                    auto stream=original.getSiblingFile(original.getFileNameWithoutExtension()+"-mode-"+juce::String(mode)+".png").createOutputStream();
+                    require(stream!=nullptr,"Main mode screenshot");
+                    require(juce::PNGImageFormat().writeImageToStream(editor->createComponentSnapshot(editor->getLocalBounds(),true),*stream),"Main mode screenshot encoding");
+                }
+            }
+            inputDisplay->onClick();outputDisplay->onClick();outputDisplay->onClick();
+            require(inputDisplay->viewMode()==0 && outputDisplay->viewMode()==1,"Display cycle wraps to original views");
+            modes[0]->onClick();
             juce::TextButton* navigation=nullptr;
             for(auto* child:editor->getChildren())
                 if(auto* button=dynamic_cast<juce::TextButton*>(child);button && button->getButtonText()=="Details >")navigation=button;

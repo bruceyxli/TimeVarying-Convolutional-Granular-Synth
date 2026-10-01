@@ -35,6 +35,7 @@ void OrbitProcessor::prepareToPlay(double rate,int maximumBlock) {
     engine.prepare(rate);
     processingRate=rate;
     outputSpectrum.reset();
+    inputSpectrum.reset();
     // Hosts may send larger blocks; split them into this preallocated capacity.
     monoScratch.setSize(1,std::max(1,maximumBlock));
     setLatencySamples(0); // lookback is a creative delay, not FFT buffering latency
@@ -56,6 +57,7 @@ void OrbitProcessor::process(juce::AudioBuffer<float>& buffer,bool hostBypassed)
     p.variant=juce::roundToInt(v(variant));p.longIrMs=v(longIr);
     for(int c=getTotalNumInputChannels();c<buffer.getNumChannels();++c) buffer.clear(c,0,buffer.getNumSamples());
     if(buffer.getNumChannels()==0) return;
+    inputSpectrum.capture(buffer.getReadPointer(0),buffer.getNumChannels()>1?buffer.getReadPointer(1):nullptr,buffer.getNumSamples(),processingRate);
     if(buffer.getNumChannels()>1) engine.process(buffer.getWritePointer(0),buffer.getWritePointer(1),buffer.getNumSamples(),p);
     else {
         const int capacity=monoScratch.getNumSamples();
@@ -75,13 +77,16 @@ void OrbitProcessor::processBlockBypassed(juce::AudioBuffer<float>& b,juce::Midi
 juce::AudioProcessorParameter* OrbitProcessor::getBypassParameter() const { return state.getParameter("bypass"); }
 juce::AudioProcessorEditor* OrbitProcessor::createEditor() { return new OrbitEditor(*this); }
 void OrbitProcessor::getStateInformation(juce::MemoryBlock& data) {
-    auto tree=state.copyState(); tree.setProperty("schemaVersion",3,nullptr);
+    auto tree=state.copyState(); tree.setProperty("schemaVersion",4,nullptr);
+    tree.setProperty("inputView",inputView.load(),nullptr);tree.setProperty("outputView",outputView.load(),nullptr);
     if(auto xml=tree.createXml()) copyXmlToBinary(*xml,data);
 }
 void OrbitProcessor::setStateInformation(const void* data,int size) {
     if(auto xml=getXmlFromBinary(data,size))
         if(xml->hasTagName(state.state.getType())) {
             auto restored=juce::ValueTree::fromXml(*xml);
+            inputView.store(juce::jlimit(0,2,static_cast<int>(restored.getProperty("inputView",0))));
+            outputView.store(juce::jlimit(0,2,static_cast<int>(restored.getProperty("outputView",1))));
             if(!restored.getChildWithProperty("id","reverb").isValid()) {
                 juce::ValueTree parameter("PARAM");parameter.setProperty("id","reverb",nullptr);parameter.setProperty("value",0.0f,nullptr);
                 restored.addChild(parameter,-1,nullptr);

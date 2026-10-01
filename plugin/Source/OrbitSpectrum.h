@@ -15,7 +15,8 @@ public:
     void reset() noexcept { position=0;++generation; }
     void capture(const float* left,const float* right,int count,double rate) noexcept {
         for(int i=0;i<count;++i) {
-            pending.left[static_cast<size_t>(position)]=left[i];pending.right[static_cast<size_t>(position)]=right?right[i]:left[i];
+            pending.left[static_cast<size_t>(position)]=std::isfinite(left[i])?left[i]:0;
+            const float r=right?right[i]:left[i];pending.right[static_cast<size_t>(position)]=std::isfinite(r)?r:0;
             if(++position==256) {
                 pending.sampleRate=rate;pending.generation=generation;
                 const auto w=write.load(std::memory_order_relaxed);
