@@ -14,7 +14,7 @@ const std::array<Preset,5> presets{{
     {"Sparse sparkles",30,12,7,.7f,.12f,.9f,0,2},
     {"Percussive microroom",50,10,0,.4f,.04f,.4f,0,0}
 }};
-const std::array<const char*,13> parameterIds{{"density","grain","pitch","mix","jitter","spread","lookback","output","ir","strategy","seed","bypass","reverb"}};
+const std::array<const char*,15> parameterIds{{"density","grain","pitch","mix","jitter","spread","lookback","output","ir","strategy","seed","bypass","reverb","variant","longIr"}};
 }
 
 OrbitLook::OrbitLook() {
@@ -105,6 +105,42 @@ void InputScope::paint(juce::Graphics& g) {
         }
     }
     if(clip) { g.setColour(juce::Colour{0xfff29ab3}); g.fillEllipse(w-6,5,4,4); }
+}
+
+OutputSpectrum::OutputSpectrum(orbit::OutputQueue& q,OrbitLook& l):queue(q),look(l) {timerCallback();startTimerHz(30);}
+void OutputSpectrum::timerCallback() {
+    orbit::OutputFrame frame;bool received=false;
+    while(queue.pop(frame)){analyzer.append(frame);received=true;}
+    const auto now=juce::Time::getMillisecondCounterHiRes();
+    if(received){analyzer.analyze();lastData=now;}
+    const bool stale=now-lastData>250;
+    const float maximum=std::min(20000.0f,static_cast<float>(analyzer.sampleRate()*.5));
+    bool changed=false;
+    for(size_t i=0;i<levels.size();++i) {
+        const float low=20*std::pow(maximum/20,static_cast<float>(i)/64);
+        const float high=20*std::pow(maximum/20,static_cast<float>(i+1)/64);
+        const float target=stale?0:juce::jlimit(0.0f,1.0f,(analyzer.level(low,high)+90)/90);
+        auto& value=levels[i];const float next=value+(target-value)*(target>value?.65f:.16f);
+        if(std::abs(next-value)>.0001f){value=next;changed=true;}else value=target;
+    }
+    if(changed || received)repaint();
+}
+void OutputSpectrum::paint(juce::Graphics& g) {
+    g.fillAll(background);g.setFont(look.font(11));g.setColour(muted);g.drawText("OUTPUT",0,0,getWidth(),18,juce::Justification::left);
+    const float w=static_cast<float>(getWidth()),top=27,bottom=static_cast<float>(getHeight()-17),height=bottom-top;
+    g.setColour(line);
+    for(int i=0;i<3;++i)g.drawHorizontalLine(static_cast<int>(top+height*static_cast<float>(i)/2),0,w);
+    juce::Path trace;trace.startNewSubPath(0,bottom-levels[0]*height);
+    for(size_t i=1;i<levels.size();++i)trace.lineTo(static_cast<float>(i)*w/63,bottom-levels[i]*height);
+    auto fill=trace;fill.lineTo(w,bottom);fill.lineTo(0,bottom);fill.closeSubPath();
+    g.setGradientFill(juce::ColourGradient(blue.withAlpha(.24f),0,top,blue.withAlpha(.01f),0,bottom,false));g.fillPath(fill);
+    g.setColour(blue.withAlpha(.13f));g.strokePath(trace,juce::PathStrokeType(4));
+    g.setColour(blue);g.strokePath(trace,juce::PathStrokeType(1.1f));
+    g.setFont(look.font(9));g.setColour(muted);
+    g.drawText("20",0,getHeight()-13,35,13,juce::Justification::left);
+    g.drawText("1k",getWidth()/2, getHeight()-13,35,13,juce::Justification::centred);
+    const auto upper=juce::String(std::min(20.0,analyzer.sampleRate()*.0005),0)+"k";
+    g.drawText(upper,getWidth()-40,getHeight()-13,40,13,juce::Justification::right);
 }
 
 OrbitPad::OrbitPad(juce::AudioProcessorValueTreeState& s):state(s) {
@@ -216,7 +252,7 @@ void OrbitPad::paint(juce::Graphics& g) {
     g.setColour(juce::Colours::white.withAlpha(.95f));g.fillEllipse(hx-2,hy-2.5f,2.4f,2.4f);
 }
 
-OrbitEditor::OrbitEditor(OrbitProcessor& p):AudioProcessorEditor(p),processor(p),scope(p.engine.scope,look),pad(p.state) {
+OrbitEditor::OrbitEditor(OrbitProcessor& p):AudioProcessorEditor(p),processor(p),scope(p.engine.scope,look),spectrum(p.outputSpectrum,look),pad(p.state) {
     setLookAndFeel(&look); setOpaque(true);
     auto attach=[&](juce::Slider& slider,const char* id,const char* name,bool small=false) {
         slider.setSliderStyle(juce::Slider::LinearHorizontal);
@@ -238,15 +274,19 @@ OrbitEditor::OrbitEditor(OrbitProcessor& p):AudioProcessorEditor(p),processor(p)
     reverb.setRotaryParameters(orbit::pi*1.25f,orbit::pi*2.75f,true);
     attach(jitter,"jitter","Trigger jitter",true); attach(spread,"spread","Stereo spread",true);
     attach(lookback,"lookback","Lookback",true); attach(output,"output","Output gain",true); attach(seed,"seed","Random seed",true);
+    attach(longIr,"longIr","Long IR",true);longIr.setTextValueSuffix(" ms");
     grain.setTextValueSuffix(" ms"); pitch.setTextValueSuffix(" st"); lookback.setTextValueSuffix(" ms"); output.setTextValueSuffix(" dB");
     ir.addItemList({"8 ms","16 ms","24 ms","32 ms"},1);
     strategy.addItemList({"Fixed","Cycle","Random","Weighted","Centroid"},1);
+    variant.addItemList({"Per-grain convolution","Convolve -> Granulate","Grains as IR"},1);
+    variant.setTitle("Signal path");variant.setTooltip(orbitParameterHelp("variant"));
     ir.setTitle("IR length"); strategy.setTitle("IR selection"); preset.setTitle("Preset");
     ir.setTooltip(orbitParameterHelp("ir"));strategy.setTooltip(orbitParameterHelp("strategy"));
     bypass.setTooltip(orbitParameterHelp("bypass"));pad.setTooltip(orbitParameterHelp("xy"));
     scope.setTooltip(orbitParameterHelp("input"));
+    spectrum.setTooltip(orbitParameterHelp("spectrum"));
     preset.setTextWhenNothingSelected("Custom");
-    for(auto* c:std::initializer_list<juce::Component*>{&scope,&pad,&preset,&ir,&strategy,&previous,&next,&details,&bypass,&savePreset}) addAndMakeVisible(c);
+    for(auto* c:std::initializer_list<juce::Component*>{&scope,&spectrum,&pad,&preset,&ir,&strategy,&variant,&previous,&next,&details,&bypass,&savePreset}) addAndMakeVisible(c);
     addChildComponent(savePanel);
     for(auto* c:std::initializer_list<juce::Component*>{&presetName,&savePrompt,&saveError,&confirmSave,&cancelSave})savePanel.addAndMakeVisible(c);
     savePrompt.setText("Save preset",juce::dontSendNotification);
@@ -261,6 +301,7 @@ OrbitEditor::OrbitEditor(OrbitProcessor& p):AudioProcessorEditor(p),processor(p)
     presetName.onReturnKey=[this]{commitPreset();};presetName.onEscapeKey=cancelSave.onClick;
     irAttachment=std::make_unique<ComboAttachment>(p.state,"ir",ir);
     strategyAttachment=std::make_unique<ComboAttachment>(p.state,"strategy",strategy);
+    variantAttachment=std::make_unique<ComboAttachment>(p.state,"variant",variant);
     bypassAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"bypass",bypass);
     preset.onChange=[this]{if(preset.getSelectedId()>0) applyPreset(preset.getSelectedId()-1);};
     preset.onOpen=[this]{refreshPresets();};
@@ -279,30 +320,37 @@ juce::String OrbitEditor::getTooltip() {
         if(hit(40,238,265,57))return orbitParameterHelp("jitter");
         if(hit(40,329,265,57))return orbitParameterHelp("spread");
         if(hit(40,420,265,57))return orbitParameterHelp("seed");
-        if(hit(368,238,265,62))return orbitParameterHelp("ir");
-        if(hit(368,329,265,59))return orbitParameterHelp("strategy");
-        if(hit(368,420,265,57))return orbitParameterHelp("lookback");
+        if(hit(368,238,265,62))return orbitParameterHelp("variant");
+        const int mode=juce::roundToInt(processor.state.getRawParameterValue("variant")->load());
+        if(hit(368,329,265,59) && mode!=2)return orbitParameterHelp(mode==0?"ir":"longIr");
+        if(hit(368,420,265,57) && mode==0)return orbitParameterHelp("strategy");
+        if(hit(690,420,268,57))return orbitParameterHelp("lookback");
         if(hit(690,238,268,57))return orbitParameterHelp("output");
         if(hit(690,329,268,72))return orbitParameterHelp("reverb");
         return {};
     }
     if(hit(40,255,220,102))return orbitParameterHelp("density");
     if(hit(40,380,220,63))return orbitParameterHelp("grain");
-    if(hit(735,169,220,103))return orbitParameterHelp("pitch");
-    if(hit(735,310,220,133))return orbitParameterHelp("mix");
+    if(hit(735,255,220,102))return orbitParameterHelp("pitch");
+    if(hit(735,375,220,100))return orbitParameterHelp("mix");
     if(hit(440,503,170,58))return orbitParameterHelp("reverb");
     return {};
 }
 void OrbitEditor::setExpanded(bool open) {
     expanded=open;
-    for(auto* c:std::initializer_list<juce::Component*>{&jitter,&spread,&lookback,&output,&seed,&ir,&strategy}) c->setVisible(open);
-    for(auto* c:std::initializer_list<juce::Component*>{&scope,&pad,&density,&grain,&pitch,&mix}) c->setVisible(!open);
+    for(auto* c:std::initializer_list<juce::Component*>{&jitter,&spread,&lookback,&output,&seed,&variant}) c->setVisible(open);
+    for(auto* c:std::initializer_list<juce::Component*>{&scope,&spectrum,&pad,&density,&grain,&pitch,&mix}) c->setVisible(!open);
+    updateModeControls();
     details.setButtonText(open?"< Back":"Details >");
     const int height=620;
     setResizeLimits(800,height*8/10,1600,height*16/10);
     getConstrainer()->setFixedAspectRatio(1000.0/height);
     if(getWidth()>0) setSize(getWidth(),getWidth()*height/1000);
     resized(); repaint();
+}
+void OrbitEditor::updateModeControls() {
+    const int mode=juce::roundToInt(processor.state.getRawParameterValue("variant")->load());
+    ir.setVisible(expanded && mode==0);strategy.setVisible(expanded && mode==0);longIr.setVisible(expanded && mode==1);
 }
 void OrbitEditor::applyPreset(int index) {
     if(index>=1000) {
@@ -311,7 +359,7 @@ void OrbitEditor::applyPreset(int index) {
         syncPreset();repaint();return;
     }
     const auto& p=presets[static_cast<size_t>(juce::jlimit(0,4,index))];
-    const std::array<std::pair<const char*,float>,13> targets{{{"density",p.density},{"grain",p.grain},{"pitch",p.pitch},{"mix",p.mix},{"jitter",p.jitter},{"spread",p.spread},{"ir",static_cast<float>(p.ir)},{"strategy",static_cast<float>(p.strategy)},{"reverb",0},{"lookback",40},{"output",-3},{"seed",2025},{"bypass",0}}};
+    const std::array<std::pair<const char*,float>,15> targets{{{"density",p.density},{"grain",p.grain},{"pitch",p.pitch},{"mix",p.mix},{"jitter",p.jitter},{"spread",p.spread},{"ir",static_cast<float>(p.ir)},{"strategy",static_cast<float>(p.strategy)},{"reverb",0},{"lookback",40},{"output",-3},{"seed",2025},{"bypass",0},{"variant",0},{"longIr",120}}};
     for(const auto& target:targets) { auto* parameter=processor.state.getParameter(target.first); parameter->beginChangeGesture(); parameter->setValueNotifyingHost(parameter->convertTo0to1(target.second)); parameter->endChangeGesture(); }
     syncPreset(); repaint(); pad.repaint();
 }
@@ -322,7 +370,7 @@ void OrbitEditor::syncPreset() {
     auto matches=[&](const char* id,float v){return std::abs(processor.state.getRawParameterValue(id)->load()-v)<.002f;};
     for(size_t i=0;i<presets.size();++i) {
         const auto& p=presets[i];
-        if(matches("density",p.density)&&matches("grain",p.grain)&&matches("pitch",p.pitch)&&matches("mix",p.mix)&&matches("jitter",p.jitter)&&matches("spread",p.spread)&&matches("ir",static_cast<float>(p.ir))&&matches("strategy",static_cast<float>(p.strategy))&&matches("reverb",0)&&matches("lookback",40)&&matches("output",-3)&&matches("seed",2025)&&matches("bypass",0)) selected=static_cast<int>(i)+1;
+        if(matches("density",p.density)&&matches("grain",p.grain)&&matches("pitch",p.pitch)&&matches("mix",p.mix)&&matches("jitter",p.jitter)&&matches("spread",p.spread)&&matches("ir",static_cast<float>(p.ir))&&matches("strategy",static_cast<float>(p.strategy))&&matches("reverb",0)&&matches("lookback",40)&&matches("output",-3)&&matches("seed",2025)&&matches("bypass",0)&&matches("variant",0)&&matches("longIr",120)) selected=static_cast<int>(i)+1;
     }
     for(size_t i=0;i<userPresets.size();++i)if(UserPresetStore::matches(userPresets[i],processor.state))selected=1001+static_cast<int>(i);
     preset.setSelectedId(selected,juce::dontSendNotification);
@@ -355,7 +403,7 @@ void OrbitEditor::timerCallback() {
         const auto v=processor.state.getRawParameterValue(parameterIds[i])->load(std::memory_order_relaxed);
         if(v!=previousValues[i]) { previousValues[i]=v; changed=true; }
     }
-    if(changed) { syncPreset(); repaint(); }
+    if(changed) { syncPreset(); updateModeControls();repaint(); }
     pad.updateVisuals();
 }
 void OrbitEditor::resized() {
@@ -367,14 +415,14 @@ void OrbitEditor::resized() {
     auto inPanel=[&](juce::Component& c,int x,int y,int w,int h){c.setBounds(juce::roundToInt(x*panelScale),juce::roundToInt(y*panelScale),juce::roundToInt(w*panelScale),juce::roundToInt(h*panelScale));};
     inPanel(savePrompt,18,10,320,24);inPanel(presetName,20,42,320,32);inPanel(saveError,18,78,324,28);
     inPanel(cancelSave,183,117,72,28);inPanel(confirmSave,268,117,72,28);
-    place(scope,45,116,210,106); place(pad,288,99,420,388);
+    place(scope,45,116,210,106);place(spectrum,740,116,210,106); place(pad,288,99,420,388);
     place(density,40,330,220,26); place(grain,40,416,220,26);
-    place(pitch,735,245,220,26); place(mix,735,416,220,26);
+    place(pitch,735,330,220,26); place(mix,735,450,220,26);
     place(details,865,28,95,32);
     place(reverb,445,503,58,58);
     place(jitter,40,265,265,30); place(spread,40,356,265,30);place(seed,40,447,265,30);
-    place(lookback,368,447,265,30); place(output,690,265,268,30);
-    place(ir,368,268,245,32); place(strategy,368,356,245,32);
+    place(lookback,690,447,268,30); place(output,690,265,268,30);
+    place(variant,368,268,245,32);place(ir,368,356,245,32);place(longIr,368,356,265,30); place(strategy,368,447,245,32);
     if(expanded) place(reverb,690,340,58,58);
 }
 void OrbitEditor::paint(juce::Graphics& graphics) {
@@ -391,8 +439,11 @@ void OrbitEditor::paint(juce::Graphics& graphics) {
         label("SPACE / OUTPUT",695,193,260,20,11,blue);
         g.setColour(line);g.drawHorizontalLine(224,40,305);g.drawHorizontalLine(224,368,633);g.drawHorizontalLine(224,690,958);
         label("JITTER",45,242,220,18,10,muted);label("SPREAD",45,333,220,18,10,muted);
-        label("SEED",45,424,220,18,10,muted);label("LOOKBACK",373,424,220,18,10,muted);
-        label("IR LENGTH",373,242,220,18,10,muted);label("SELECTION",373,333,220,18,10,muted);
+        label("SEED",45,424,220,18,10,muted);label("LOOKBACK",695,424,220,18,10,muted);
+        label("SIGNAL PATH",373,242,220,18,10,muted);
+        const int mode=juce::roundToInt(processor.state.getRawParameterValue("variant")->load());
+        if(mode==0){label("IR LENGTH",373,333,220,18,10,muted);label("SELECTION",373,424,220,18,10,muted);}
+        if(mode==1)label("LONG IR",373,333,220,18,10,muted);
         label("OUTPUT",695,242,220,18,10,muted);label("REVERB",763,347,160,18,10,muted);
         label(reverb.getValue()<.0005?"OFF":juce::String(reverb.getValue()*100,0)+"%",763,369,160,24,20,reverb.getValue()>0?blue:text);
         g.setColour(line);g.drawHorizontalLine(539,40,960);
@@ -403,12 +454,12 @@ void OrbitEditor::paint(juce::Graphics& graphics) {
     label("DENSITY",45,259,180,20,11,muted); label("X",239,259,16,20,10,muted);
     label(juce::String(density.getValue(),0),45,280,95,48,44);label("grains/s",142,300,75,20,11,muted);
     label("GRAIN SIZE",45,383,125,20,11,muted);label(juce::String(grain.getValue(),1)+" ms",170,383,85,20,11,muted,juce::Justification::right);
-    label("PITCH SCATTER",740,172,180,20,11,muted);label("Y",939,172,16,20,10,muted);
-    label("+/-",740,207,36,25,16,blue);label(juce::String(pitch.getValue(),1),779,191,132,50,42);label("st",916,215,35,20,11,muted);
-    juce::Path arc;arc.addCentredArc(781,353,38,38,0,orbit::pi*1.25f,orbit::pi*(1.25f+1.5f*static_cast<float>(mix.getValue())),true);
-    g.setColour(line);g.drawEllipse(743,315,76,76,2);g.setColour(blue);g.strokePath(arc,juce::PathStrokeType(2));
-    label(juce::String(mix.getValue()*100,0),751,332,60,34,29,text,juce::Justification::centred);label("%",774,367,20,12,9,muted,juce::Justification::centred);
-    label("DRY / WET",840,341,116,24,11,muted);
+    label("PITCH SCATTER",740,259,180,20,11,muted);label("Y",939,259,16,20,10,muted);
+    label("+/-",740,296,36,25,16,blue);label(juce::String(pitch.getValue(),1),779,280,132,50,42);label("st",916,304,35,20,11,muted);
+    juce::Path arc;arc.addCentredArc(781,407,32,32,0,orbit::pi*1.25f,orbit::pi*(1.25f+1.5f*static_cast<float>(mix.getValue())),true);
+    g.setColour(line);g.drawEllipse(749,375,64,64,2);g.setColour(blue);g.strokePath(arc,juce::PathStrokeType(2));
+    label(juce::String(mix.getValue()*100,0),751,385,60,34,29,text,juce::Justification::centred);label("%",774,419,20,12,9,muted,juce::Justification::centred);
+    label("DRY / WET",840,395,116,24,11,muted);
     label("REVERB",513,513,95,17,10,muted);
     label(reverb.getValue()<.0005?"OFF":juce::String(reverb.getValue()*100,0)+"%",513,532,85,20,15,reverb.getValue()>0?blue:text);
     label("VST3",916,561,44,20,10,muted,juce::Justification::right);

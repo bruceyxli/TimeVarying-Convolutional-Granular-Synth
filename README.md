@@ -6,8 +6,9 @@ A Python-based granular synthesizer that fuses **granular synthesis** with **tim
 
 The native C++/JUCE effect lives in [plugin/](plugin/README.md): live input,
 per-grain convolution, parameter automation, session state, and a minimal ice-blue
-interface with a live stereo input scope. The first native version implements
-Standard mode; experimental A/B modes remain in the Python application.
+interface with a live stereo input scope and symmetric output spectrum. Native
+0.5.0 includes Standard, Convolve → Granulate (A), and Grains as IR (B), selected
+in Details → Convolution → Signal path.
 See the plugin README for build, installation and dependency license details.
 The **ORBIT Windows VST3** GitHub Actions workflow builds and validates Windows x64
 artifacts. DAW-specific session testing remains a release requirement.

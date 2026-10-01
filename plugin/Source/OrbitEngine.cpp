@@ -66,13 +66,14 @@ void Engine::prepare(double sampleRate) {
     maxGrain = static_cast<int>(std::ceil(sr * .05));
     historyL.assign(static_cast<size_t>(historySize), 0);
     historyR.assign(static_cast<size_t>(historySize), 0);
-    const int maximum = maxGrain + static_cast<int>(std::ceil(sr * .032)) + 1;
+    convolvedL.assign(static_cast<size_t>(historySize),0);convolvedR.assign(static_cast<size_t>(historySize),0);
+    const int maximum = maxGrain*3+1;
     for (auto& voice : voices) {
         voice.left.resize(static_cast<size_t>(maximum));
         voice.right.resize(static_cast<size_t>(maximum));
     }
     for (int i = 0; i < fftCount; ++i) fft[static_cast<size_t>(i)].prepare(256 << i);
-    scratchL.resize(16384); scratchR.resize(16384);
+    scratchL.resize(32768); scratchR.resize(32768);exciterL.resize(32768);exciterR.resize(32768);
     for (size_t i = 0; i < window.size(); ++i)
         window[i] = .5f - .5f * std::cos(2.0f*pi*static_cast<float>(i)/4096.0f);
 
@@ -120,12 +121,12 @@ void Engine::prepare(double sampleRate) {
             kernel.centroid=centre; // centroid measured below for content-aware selection
             for (int f=0;f<fftCount;++f) {
                 const int size=fft[static_cast<size_t>(f)].size();
-                if (size < length) continue;
+                if (size < length || size>16384) continue;
                 auto& spectrum=kernel.spectra[static_cast<size_t>(f)];
                 spectrum.assign(static_cast<size_t>(size),{});
                 for(int i=0;i<length;++i) spectrum[static_cast<size_t>(i)]=samples[static_cast<size_t>(i)];
                 fft[static_cast<size_t>(f)].transform(spectrum.data(),false);
-                if(f==fftCount-1) {
+                if(size==16384) {
                     double weighted=0,total=0;
                     for(int i=1;i<=size/2;++i) { const auto m=std::abs(spectrum[static_cast<size_t>(i)]); weighted+=m*i*sr/size; total+=m; }
                     kernel.centroid=static_cast<float>(weighted/(total+1e-12));
@@ -136,10 +137,13 @@ void Engine::prepare(double sampleRate) {
     scopeStride=std::max(1,static_cast<int>(sr/256));
     smoothing=1.0f-std::exp(-1.0f/static_cast<float>(sr*.02));
     room.prepare(sr);
+    longConvolver.prepare(sr);
     reset();
 }
 void Engine::reset() noexcept {
     std::fill(historyL.begin(),historyL.end(),0); std::fill(historyR.begin(),historyR.end(),0);
+    std::fill(convolvedL.begin(),convolvedL.end(),0);std::fill(convolvedR.begin(),convolvedR.end(),0);
+    longConvolver.reset();lastVariant=0;convolvedAge=0;
     for(auto& v:voices) v.length=v.position=0;
     historyHead=0; nextTrigger=0; rng=lastSeed=2025; cycle=0; dropped=0;
     scopeCount=0; scopeFrame={}; initialParameters=true;
@@ -168,7 +172,8 @@ void Engine::trigger(const Parameters& p) noexcept {
     const double ratio=.5+rate*.01;
     const int irLength=std::clamp(p.irLength,0,3);
     auto& bank=kernels[static_cast<size_t>(irLength)];
-    const int convolutionLength=length+bank[0].length-1;
+    const int exciterLength=std::max(8,static_cast<int>(std::ceil(length*ratio)));
+    const int convolutionLength=p.variant==1?length:(p.variant==2?length+exciterLength-1:length+bank[0].length-1);
     int fftIndex=0;
     while(fftIndex<fftCount-1 && fft[static_cast<size_t>(fftIndex)].size()<convolutionLength) ++fftIndex;
     const int size=fft[static_cast<size_t>(fftIndex)].size();
@@ -176,14 +181,38 @@ void Engine::trigger(const Parameters& p) noexcept {
     std::fill_n(scratchR.data(),size,std::complex<float>{});
     // Read a past snapshot. Extra interpolation guard guarantees no future reads.
     const double start=historyHead-1-std::ceil(length*ratio)-taps-static_cast<double>(p.lookbackMs)*sr*.001;
+    const auto& sourceL=p.variant==1?convolvedL:historyL;
+    const auto& sourceR=p.variant==1?convolvedR:historyR;
+    // Never replay stale convolved history after returning to Variant A.
+    const bool ready=p.variant!=1 || convolvedAge>std::ceil(length*ratio)+taps*2+static_cast<double>(p.lookbackMs)*sr*.001;
+    double normL=0,normR=0;
     for(int i=0;i<length;++i) {
         const float w=static_cast<float>(i)*4096/static_cast<float>(length-1);
         const auto wi=static_cast<size_t>(std::min(4095,static_cast<int>(w)));
         const float hann=window[wi]+(window[wi+1]-window[wi])*(w-static_cast<float>(wi));
-        scratchL[static_cast<size_t>(i)]=readSample(historyL,start+i*ratio,rate)*hann;
-        scratchR[static_cast<size_t>(i)]=readSample(historyR,start+i*ratio,rate)*hann;
+        const float l=ready?readSample(sourceL,start+i*ratio,rate)*hann:0;
+        const float r=ready?readSample(sourceR,start+i*ratio,rate)*hann:0;
+        scratchL[static_cast<size_t>(i)]=l;scratchR[static_cast<size_t>(i)]=r;
+        normL+=std::abs(l);normR+=std::abs(r);
     }
     auto& transform=fft[static_cast<size_t>(fftIndex)];
+    if(p.variant==1) {
+        for(int i=0;i<length;++i){voice->left[static_cast<size_t>(i)]=scratchL[static_cast<size_t>(i)].real();voice->right[static_cast<size_t>(i)]=scratchR[static_cast<size_t>(i)].real();}
+    } else if(p.variant==2) {
+        // A raw source segment excites the pitched/windowed grain used as an IR.
+        // L1 normalization bounds gain without a render-wide peak normalization pass.
+        std::fill_n(exciterL.data(),size,std::complex<float>{});std::fill_n(exciterR.data(),size,std::complex<float>{});
+        for(int i=0;i<exciterLength;++i) {
+            exciterL[static_cast<size_t>(i)]=readSample(historyL,start+i,50);
+            exciterR[static_cast<size_t>(i)]=readSample(historyR,start+i,50);
+        }
+        transform.transform(scratchL.data(),false);transform.transform(scratchR.data(),false);
+        transform.transform(exciterL.data(),false);transform.transform(exciterR.data(),false);
+        const float scaleL=1.0f/static_cast<float>(std::max(1.0,normL)),scaleR=1.0f/static_cast<float>(std::max(1.0,normR));
+        for(int i=0;i<size;++i){scratchL[static_cast<size_t>(i)]*=exciterL[static_cast<size_t>(i)]*scaleL;scratchR[static_cast<size_t>(i)]*=exciterR[static_cast<size_t>(i)]*scaleR;}
+        transform.transform(scratchL.data(),true);transform.transform(scratchR.data(),true);
+        for(int i=0;i<convolutionLength;++i){voice->left[static_cast<size_t>(i)]=scratchL[static_cast<size_t>(i)].real();voice->right[static_cast<size_t>(i)]=scratchR[static_cast<size_t>(i)].real();}
+    } else {
     transform.transform(scratchL.data(),false); transform.transform(scratchR.data(),false);
     int ir=0;
     switch(p.strategy) {
@@ -213,6 +242,7 @@ void Engine::trigger(const Parameters& p) noexcept {
     for(int i=0;i<size;++i) { scratchL[static_cast<size_t>(i)]*=spectrum[static_cast<size_t>(i)]; scratchR[static_cast<size_t>(i)]*=spectrum[static_cast<size_t>(i)]; }
     transform.transform(scratchL.data(),true); transform.transform(scratchR.data(),true);
     for(int i=0;i<convolutionLength;++i) { voice->left[static_cast<size_t>(i)]=scratchL[static_cast<size_t>(i)].real(); voice->right[static_cast<size_t>(i)]=scratchR[static_cast<size_t>(i)].real(); }
+    }
     voice->length=convolutionLength; voice->position=0;
     const float pan=(random()*2-1)*p.spread;
     const float normal=1.0f/std::max(1.0f,p.density*p.grainMs*.0005f);
@@ -234,6 +264,11 @@ void Engine::process(float* left,float* right,int samples,const Parameters& para
     p.jitter=std::clamp(finite(p.jitter),0.0f,.5f);
     p.spread=std::clamp(finite(p.spread),0.0f,1.0f);
     p.lookbackMs=std::clamp(finite(p.lookbackMs/100)*100,0.0f,200.0f);
+    p.variant=std::clamp(p.variant,0,2);p.longIrMs=std::clamp(finite(p.longIrMs/100)*100,40.0f,300.0f);
+    if(p.variant!=lastVariant) {
+        if(p.variant==1){longConvolver.reset();convolvedAge=0;}
+        lastVariant=p.variant;
+    }
     const float targetMix=p.bypass?0:std::clamp(finite(p.mix),0.0f,1.0f);
     const float targetGain=p.bypass?1:std::pow(10.0f,std::clamp(finite(p.outputDb/10)*10,-24.0f,6.0f)/20);
     const float targetReverb=p.bypass?0:std::clamp(finite(p.reverb),0.0f,1.0f);
@@ -245,6 +280,11 @@ void Engine::process(float* left,float* right,int samples,const Parameters& para
         scopeFrame.minR=std::min(scopeFrame.minR,inR); scopeFrame.maxR=std::max(scopeFrame.maxR,inR);
         if(++scopeCount>=scopeStride) { scope.push(scopeFrame); scopeCount=0; scopeFrame={}; }
         historyL[static_cast<size_t>(historyHead)]=inL; historyR[static_cast<size_t>(historyHead)]=inR;
+        if(p.variant==1) {
+            float filteredL=inL,filteredR=inR;longConvolver.process(filteredL,filteredR,p.longIrMs);
+            convolvedL[static_cast<size_t>(historyHead)]=filteredL;convolvedR[static_cast<size_t>(historyHead)]=filteredR;
+            convolvedAge=std::min(historySize,convolvedAge+1);
+        }
         historyHead=(historyHead+1)%historySize;
         if(nextTrigger<=0) {
             trigger(p);

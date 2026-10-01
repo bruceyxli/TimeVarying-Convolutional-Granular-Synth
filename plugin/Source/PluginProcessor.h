@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "OrbitEngine.h"
+#include "OrbitSpectrum.h"
 
 class OrbitProcessor final : public juce::AudioProcessor {
 public:
@@ -8,7 +9,7 @@ public:
     const juce::String getName() const override { return "ORBIT"; }
     void prepareToPlay(double sampleRate, int maximumBlock) override;
     void releaseResources() override {}
-    void reset() override { engine.reset(); }
+    void reset() override { engine.reset();outputSpectrum.reset(); }
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     void processBlockBypassed(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     bool isBusesLayoutSupported(const BusesLayout&) const override;
@@ -29,10 +30,12 @@ public:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
     juce::AudioProcessorValueTreeState state;
     orbit::Engine engine;
+    orbit::OutputQueue outputSpectrum;
 private:
-    enum Index { density, grain, pitch, mix, jitter, spread, lookback, output, ir, strategy, seed, bypass, reverb, count };
+    enum Index { density, grain, pitch, mix, jitter, spread, lookback, output, ir, strategy, seed, bypass, reverb, variant, longIr, count };
     std::array<std::atomic<float>*, count> values{};
     juce::AudioBuffer<float> monoScratch;
+    double processingRate=48000;
     void process(juce::AudioBuffer<float>&, bool bypassed);
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OrbitProcessor)
 };

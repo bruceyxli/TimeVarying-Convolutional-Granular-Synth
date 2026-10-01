@@ -20,17 +20,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout OrbitProcessor::createParame
     p.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"seed",1},"Random seed",0,65535,2025));
     p.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"bypass",1},"Bypass",false));
     add("reverb","Reverb",0,1,.001f,0);
+    p.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"variant",1},"Signal path",juce::StringArray{"Per-grain convolution","Convolve -> Granulate","Grains as IR"},0));
+    add("longIr","Long IR",40,300,5,120);
     return p;
 }
 OrbitProcessor::OrbitProcessor()
     : AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true)
                                     .withOutput("Output",juce::AudioChannelSet::stereo(),true)),
       state(*this,nullptr,"ORBIT_STATE",createParameters()) {
-    const char* ids[]{"density","grain","pitch","mix","jitter","spread","lookback","output","ir","strategy","seed","bypass","reverb"};
+    const char* ids[]{"density","grain","pitch","mix","jitter","spread","lookback","output","ir","strategy","seed","bypass","reverb","variant","longIr"};
     for(size_t i=0;i<values.size();++i) values[i]=state.getRawParameterValue(ids[i]);
 }
 void OrbitProcessor::prepareToPlay(double rate,int maximumBlock) {
     engine.prepare(rate);
+    processingRate=rate;
+    outputSpectrum.reset();
     // Hosts may send larger blocks; split them into this preallocated capacity.
     monoScratch.setSize(1,std::max(1,maximumBlock));
     setLatencySamples(0); // lookback is a creative delay, not FFT buffering latency
@@ -49,6 +53,7 @@ void OrbitProcessor::process(juce::AudioBuffer<float>& buffer,bool hostBypassed)
     p.irLength=juce::roundToInt(v(ir)); p.strategy=juce::roundToInt(v(strategy));
     p.seed=static_cast<uint32_t>(v(seed)); p.bypass=hostBypassed || v(bypass)>.5f;
     p.reverb=v(reverb);
+    p.variant=juce::roundToInt(v(variant));p.longIrMs=v(longIr);
     for(int c=getTotalNumInputChannels();c<buffer.getNumChannels();++c) buffer.clear(c,0,buffer.getNumSamples());
     if(buffer.getNumChannels()==0) return;
     if(buffer.getNumChannels()>1) engine.process(buffer.getWritePointer(0),buffer.getWritePointer(1),buffer.getNumSamples(),p);
@@ -63,13 +68,14 @@ void OrbitProcessor::process(juce::AudioBuffer<float>& buffer,bool hostBypassed)
             for(int i=0;i<length;++i) l[i]=(l[i]+r[i])*.5f;
         }
     }
+    outputSpectrum.capture(buffer.getReadPointer(0),buffer.getNumChannels()>1?buffer.getReadPointer(1):nullptr,buffer.getNumSamples(),processingRate);
 }
 void OrbitProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBuffer&) { process(b,false); }
 void OrbitProcessor::processBlockBypassed(juce::AudioBuffer<float>& b,juce::MidiBuffer&) { process(b,true); }
 juce::AudioProcessorParameter* OrbitProcessor::getBypassParameter() const { return state.getParameter("bypass"); }
 juce::AudioProcessorEditor* OrbitProcessor::createEditor() { return new OrbitEditor(*this); }
 void OrbitProcessor::getStateInformation(juce::MemoryBlock& data) {
-    auto tree=state.copyState(); tree.setProperty("schemaVersion",2,nullptr);
+    auto tree=state.copyState(); tree.setProperty("schemaVersion",3,nullptr);
     if(auto xml=tree.createXml()) copyXmlToBinary(*xml,data);
 }
 void OrbitProcessor::setStateInformation(const void* data,int size) {
@@ -80,6 +86,11 @@ void OrbitProcessor::setStateInformation(const void* data,int size) {
                 juce::ValueTree parameter("PARAM");parameter.setProperty("id","reverb",nullptr);parameter.setProperty("value",0.0f,nullptr);
                 restored.addChild(parameter,-1,nullptr);
             }
+            for(const auto& added:std::array<std::pair<const char*,float>,2>{{{"variant",0},{"longIr",120}}})
+                if(!restored.getChildWithProperty("id",added.first).isValid()) {
+                    juce::ValueTree parameter("PARAM");parameter.setProperty("id",added.first,nullptr);parameter.setProperty("value",added.second,nullptr);
+                    restored.addChild(parameter,-1,nullptr);
+                }
             state.replaceState(restored);
         }
 }

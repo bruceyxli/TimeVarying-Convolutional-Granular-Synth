@@ -12,7 +12,7 @@ public:
         return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("ORBIT/Presets");
     }
     static juce::StringArray ids() {
-        return {"density","grain","pitch","mix","jitter","spread","lookback","output","ir","strategy","seed","bypass","reverb"};
+        return {"density","grain","pitch","mix","jitter","spread","lookback","output","ir","strategy","seed","bypass","reverb","variant","longIr"};
     }
     static juce::var capture(juce::AudioProcessorValueTreeState& state) {
         auto* object=new juce::DynamicObject;
@@ -50,9 +50,14 @@ public:
         for(const auto& file:directory.findChildFiles(juce::File::findFiles,false,"*.orbitpreset")) {
             if(file.getSize()>32768)continue;
             const auto data=juce::JSON::parse(file.loadFileAsString());
-            if(data.getProperty("format",juce::var()).toString()!="ORBIT_PRESET" || static_cast<int>(data.getProperty("version",0))!=1)continue;
+            const int version=static_cast<int>(data.getProperty("version",0));
+            if(data.getProperty("format",juce::var()).toString()!="ORBIT_PRESET" || (version!=1 && version!=2))continue;
             const auto name=data.getProperty("name",juce::var()).toString().trim();
-            const auto values=data.getProperty("parameters",juce::var());
+            auto values=data.getProperty("parameters",juce::var());
+            if(version==1) {
+                if(!values.isObject() || values.getDynamicObject()->getProperties().size()!=13 || values.hasProperty("variant") || values.hasProperty("longIr"))continue;
+                values=values.clone();values.getDynamicObject()->setProperty("variant",0);values.getDynamicObject()->setProperty("longIr",120);
+            }
             if(name.isEmpty()||name.length()>80||!valid(values,state))continue;
             entries.push_back({name,values});
         }
@@ -69,7 +74,7 @@ public:
         while(names.contains(unique,true))unique=name+" ("+juce::String(suffix++)+")";
         auto* object=new juce::DynamicObject;
         const juce::var data(object);
-        object->setProperty("format","ORBIT_PRESET");object->setProperty("version",1);
+        object->setProperty("format","ORBIT_PRESET");object->setProperty("version",2);
         object->setProperty("name",unique);object->setProperty("parameters",capture(state));
         if(!valid(data.getProperty("parameters",juce::var()),state))return juce::Result::fail("Cannot save invalid parameter values.");
         auto result=directory.createDirectory();if(result.failed())return juce::Result::fail("Cannot create the preset folder.");

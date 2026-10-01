@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.22)
-project(Orbit VERSION 0.4.3 LANGUAGES C CXX)
+project(Orbit VERSION 0.5.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-add_library(orbit_dsp STATIC Source/OrbitEngine.cpp)
+add_library(orbit_dsp STATIC Source/OrbitEngine.cpp Source/OrbitConvolution.cpp)
 target_include_directories(orbit_dsp PUBLIC Source)
 if(MSVC)
     target_compile_options(orbit_dsp PRIVATE /W4 /fp:precise)

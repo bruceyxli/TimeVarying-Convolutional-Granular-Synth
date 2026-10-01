@@ -12,6 +12,9 @@ int main(int argc,char** argv) {
         density->setValueNotifyingHost(density->convertTo0to1(117));
         auto* reverb=processor.state.getParameter("reverb");
         reverb->setValueNotifyingHost(.72f);
+        processor.state.getParameter("variant")->setValueNotifyingHost(.5f);
+        auto* longIr=processor.state.getParameter("longIr");
+        longIr->setValueNotifyingHost(longIr->convertTo0to1(235));
         juce::MemoryBlock saved;
         processor.getStateInformation(saved);
         density->setValueNotifyingHost(0);
@@ -19,6 +22,14 @@ int main(int argc,char** argv) {
         processor.setStateInformation(saved.getData(),static_cast<int>(saved.getSize()));
         require(processor.state.getRawParameterValue("density")->load()==117,"State roundtrip");
         require(std::abs(processor.state.getRawParameterValue("reverb")->load()-.72f)<.001f,"Reverb state roundtrip");
+        require(processor.state.getRawParameterValue("variant")->load()==1 && processor.state.getRawParameterValue("longIr")->load()==235,"IR mode state roundtrip");
+        auto legacy=processor.state.copyState();
+        for(const auto* id:{"variant","longIr"})legacy.removeChild(legacy.getChildWithProperty("id",id),nullptr);
+        juce::MemoryBlock legacyData;
+        juce::AudioProcessor::copyXmlToBinary(*legacy.createXml(),legacyData);
+        processor.setStateInformation(legacyData.getData(),static_cast<int>(legacyData.getSize()));
+        require(processor.state.getRawParameterValue("variant")->load()==0 && processor.state.getRawParameterValue("longIr")->load()==120,"Legacy session defaults");
+        processor.setStateInformation(saved.getData(),static_cast<int>(saved.getSize()));
         processor.setStateInformation("invalid",7);
         require(processor.state.getRawParameterValue("density")->load()==117,"Invalid state changed parameters");
 
@@ -41,6 +52,19 @@ int main(int argc,char** argv) {
         juce::var invalid=expected.clone();invalid.getDynamicObject()->setProperty("mix",2.0);
         require(!UserPresetStore::apply({"invalid",invalid},processor.state),"Out-of-range preset rejected atomically");
         require(UserPresetStore::matches({firstName,expected},processor.state),"Invalid preset must not partially change parameters");
+        auto oldValues=expected.clone();
+        oldValues.getDynamicObject()->removeProperty("variant");oldValues.getDynamicObject()->removeProperty("longIr");
+        auto* oldObject=new juce::DynamicObject;juce::var oldPreset(oldObject);
+        oldObject->setProperty("format","ORBIT_PRESET");oldObject->setProperty("version",1);
+        oldObject->setProperty("name","Legacy");oldObject->setProperty("parameters",oldValues);
+        require(presetFolder.getChildFile("legacy.orbitpreset").replaceWithText(juce::JSON::toString(oldPreset)),"Legacy preset fixture");
+        const auto migrated=reopenedLibrary.list(processor.state);
+        require(migrated.size()==3,"Legacy preset is retained");
+        for(const auto& entry:migrated)if(entry.name=="Legacy")
+            require(static_cast<int>(entry.parameters["variant"])==0 && static_cast<int>(entry.parameters["longIr"])==120,"Legacy preset gets Standard defaults");
+        oldObject->setProperty("version",2);
+        require(presetFolder.getChildFile("partial.orbitpreset").replaceWithText(juce::JSON::toString(oldPreset)),"Partial preset fixture");
+        require(reopenedLibrary.list(processor.state).size()==3,"Incomplete new presets rejected");
         for(const auto& file:presetFolder.findChildFiles(juce::File::findFiles,false))require(file.deleteFile(),"Remove temporary preset fixture");
         require(presetFolder.deleteFile(),"Remove empty preset test folder");
 
@@ -55,7 +79,14 @@ int main(int argc,char** argv) {
         juce::MidiBuffer midi;
         processor.processBlock(audio,midi);
         for(int i=0;i<audio.getNumSamples();++i) require(audio.getSample(0,i)==.1f,"Oversized mono block / bypass");
+        orbit::OutputFrame frame;int captured=0;
+        while(processor.outputSpectrum.pop(frame)) {
+            require(frame.sampleRate==48000,"Spectrum sample rate");
+            for(size_t i=0;i<frame.left.size();++i)require(frame.left[i]==audio.getSample(0,captured++) && frame.right[i]==frame.left[i],"Spectrum captures actual mono output");
+        }
+        require(captured==audio.getNumSamples(),"Spectrum captures entire oversized block");
         processor.getBypassParameter()->setValueNotifyingHost(0);
+        processor.state.getParameter("variant")->setValueNotifyingHost(0);
         density->setValueNotifyingHost(density->convertTo0to1(80));
         reverb->setValueNotifyingHost(0);
         {

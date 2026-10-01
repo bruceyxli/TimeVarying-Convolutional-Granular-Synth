@@ -2,7 +2,9 @@
 
 Native C++17/JUCE audio effect with the minimal, cold-blue ORBIT interface.
 The left INPUT display receives live DAW input, with separate L/R envelopes,
-fixed amplitude scale and clipping indication. No browser, Python process or
+fixed amplitude scale and clipping indication. The symmetric right OUTPUT display
+shows a logarithmic spectrum of the actual final output, including Reverb and gain.
+No browser, Python process or
 internet connection is needed by the compiled plugin.
 
 Source: https://github.com/bruceyxli/TimeVarying-Convolutional-Granular-Synth
@@ -41,7 +43,7 @@ and advanced controls. Tooltips use the interface's dark, cool-colour palette.
 - Session state persists all parameters. Closing the editor does not stop processing.
 - **Save** beside the preset selector opens a small naming panel. Enter a name and
   press Save/Enter; the preset appears under **User**. Escape/Cancel closes the panel.
-  All 13 parameters are saved, including Reverb, output gain, seed and bypass.
+  All 15 parameters are saved, including signal path, Long IR, Reverb, output gain, seed and bypass.
   Same-name saves create a numbered copy. User presets persist across DAW restarts
   as `.orbitpreset` files in `%APPDATA%\ORBIT\Presets` on Windows (up to 256).
   The library refreshes when the selector opens, including saves by other instances.
@@ -49,15 +51,30 @@ and advanced controls. Tooltips use the interface's dark, cool-colour palette.
 - Existing 0.2 sessions load with Reverb off. The new parameter is appended without
   changing existing IDs/order. The host tail allowance is now 3 seconds.
 
-## First native release scope
+## Native signal paths (0.5.0)
 
-This implements the **Standard per-grain convolution** effect, with eight generated
-micro-IRs per length. Variant A, Variant B, custom IR import and loaded-sample mode
-remain in the Python reference only. This is a native interpretation, not a
+In **Details → Convolution → Signal path**, choose:
+
+- **Per-grain convolution**: each grain uses one of eight generated micro-IRs per
+  length, with the existing five selection strategies.
+- **Convolve → Granulate** (A): a generated long IR processes the live input before
+  grain capture. Long IR ranges from 40–300 ms; changes interpolate prepared kernels.
+- **Grains as IR** (B): each pitched, windowed grain becomes an impulse response
+  excited by a raw historical source segment. Per-channel L1 normalization controls gain.
+
+IR length/selection appear only for Standard; Long IR appears only for A. All modes
+use the same final Dry/Wet crossfade, followed by Reverb and output gain. In particular,
+native A retains the plugin's direct dry endpoint; Python A blends before granulation.
+Old sessions and version-1 user presets migrate to Standard / 120 ms without
+changing existing parameter IDs or order. New presets use format version 2.
+
+Custom IR import and loaded-sample mode remain in the Python reference only.
+This is a native interpretation, not a
 sample-identical port: live grains read historical input, interpolation uses a
 16-tap bandlimited table, IR generation/RNG differ, and Wet/Dry is a linked crossfade.
 
-Zero host-reported latency means no extra block/FFT buffering delay. Grain lookback
+Host-reported latency remains zero: the direct dry path has no added delay. A adds
+256 samples of convolution buffering to its creative wet path. Grain lookback
 and history capture are intentional audible time shifts; the wet signal is not
 sample-aligned to the direct dry input. The output uses a smooth ceiling above
 0.9 amplitude (except settled bypass), replacing offline peak normalization.
@@ -65,14 +82,17 @@ sample-aligned to the direct dry input. The output uses a smooth ceiling above
 ## Real-time design
 
 Preparation allocates the history, 48 stereo voices, window/interpolation tables,
-FFT plans, scratch and all IR spectra. `process()` allocates no memory and takes no
+FFT plans, scratch and all IR spectra (including 53 long-IR lengths). `process()` allocates no memory and takes no
 locks. Voices retain their convolved tails; overload drops a new grain rather than
 cutting an existing one. Worst-case configured density fits the pool.
 
-The scope uses a bounded SPSC queue. A slow/closed editor drops visual frames;
+The scope and output spectrum use bounded SPSC queues. A slow/closed editor drops visual frames;
 the audio thread never waits. The editor draws at 30 Hz and clears stale traces
 when audio callbacks stop. Input continues to display when the host transport is
 stopped but live input still arrives.
+The 4096-point spectrum FFT runs on the editor thread and combines stereo energy
+without cancelling opposite-phase channels. Its 64 bands cover 20 Hz to the lesser
+of 20 kHz and Nyquist, with a fixed -90 dBFS floor and smooth decay.
 
 ## Build and verify
 

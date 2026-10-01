@@ -2,6 +2,9 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 inline juce::String orbitParameterHelp(const juce::String& id) {
+    if(id=="variant")return "Signal Path\nChoose per-grain convolution, convolution before granulation, or grains used as impulse responses. All modes share the final Dry / Wet control.";
+    if(id=="longIr")return "Long IR\nThe response length for Convolve then Granulate, from 40 to 300 ms. Longer responses add more texture before grain processing.";
+    if(id=="spectrum")return "Output Spectrum\nLive frequency content of the final output, after Dry / Wet, Reverb and Output Gain. Stereo energy is combined without phase cancellation.";
     if(id=="density")return "Density\nGrains triggered per second. Higher values create a denser texture; lower values leave more space.";
     if(id=="grain")return "Grain Size\nThe duration of each grain. Short grains sound more fragmented; longer grains retain more of the source.";
     if(id=="pitch")return "Pitch Scatter\nRandom pitch variation per grain, in semitones. Zero keeps the original pitch.";

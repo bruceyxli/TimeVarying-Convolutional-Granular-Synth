@@ -38,6 +38,19 @@ private:
     bool stale=true;
 };
 
+class OutputSpectrum final : public juce::Component, public juce::SettableTooltipClient, private juce::Timer {
+public:
+    OutputSpectrum(orbit::OutputQueue&,OrbitLook&);
+    void paint(juce::Graphics&) override;
+private:
+    void timerCallback() override;
+    orbit::OutputQueue& queue;
+    OrbitLook& look;
+    orbit::SpectrumAnalyzer analyzer;
+    std::array<float,64> levels{};
+    double lastData=0;
+};
+
 class OrbitPad final : public juce::Component, public juce::SettableTooltipClient {
 public:
     explicit OrbitPad(juce::AudioProcessorValueTreeState&);
@@ -71,10 +84,11 @@ private:
     OrbitProcessor& processor;
     OrbitLook look;
     InputScope scope;
+    OutputSpectrum spectrum;
     OrbitPad pad;
-    juce::Slider density,grain,pitch,mix,jitter,spread,lookback,output,seed,reverb;
+    juce::Slider density,grain,pitch,mix,jitter,spread,lookback,output,seed,reverb,longIr;
     PresetCombo preset;
-    juce::ComboBox ir,strategy;
+    juce::ComboBox ir,strategy,variant;
     UserPresetStore presetStore;
     std::vector<UserPresetStore::Entry> userPresets;
     juce::TextButton savePreset{"Save"},confirmSave{"Save"},cancelSave{"Cancel"};
@@ -86,9 +100,9 @@ private:
     using SliderAttachment=juce::AudioProcessorValueTreeState::SliderAttachment;
     using ComboAttachment=juce::AudioProcessorValueTreeState::ComboBoxAttachment;
     std::vector<std::unique_ptr<SliderAttachment>> sliders;
-    std::unique_ptr<ComboAttachment> irAttachment,strategyAttachment;
+    std::unique_ptr<ComboAttachment> irAttachment,strategyAttachment,variantAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
-    std::array<float,13> previousValues{};
+    std::array<float,15> previousValues{};
     bool expanded=false;
     juce::TooltipWindow tooltips{this,550};
     void timerCallback() override;
@@ -98,5 +112,6 @@ private:
     void showSavePreset();
     void commitPreset();
     void setExpanded(bool);
+    void updateModeControls();
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OrbitEditor)
 };
