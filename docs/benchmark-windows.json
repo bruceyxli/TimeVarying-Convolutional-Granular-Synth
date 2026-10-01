@@ -1,0 +1,119 @@
+{
+  "baseline_ref": "1f8f81917223a47200730f5cac7718ac28d6d50e",
+  "baseline": {
+    "environment": {
+      "python": "3.13.9",
+      "numpy": "2.3.5",
+      "scipy": "1.16.3",
+      "platform": "Windows-11-10.0.26200-SP0",
+      "processor": "AMD64 Family 26 Model 68 Stepping 0, AuthenticAMD"
+    },
+    "repeats": 5,
+    "scenarios": {
+      "default_10s": {
+        "cold_seconds": 0.21196219998819288,
+        "median_seconds": 0.22091059999365825,
+        "max_seconds": 0.2304054999985965,
+        "playback_speed_multiple": 45.26718048064273,
+        "traced_peak_mib": 31.894600868225098
+      },
+      "dense_40s": {
+        "cold_seconds": 1.9043697000015527,
+        "median_seconds": 1.9253636000066763,
+        "max_seconds": 1.9352213999954984,
+        "playback_speed_multiple": 20.775296676358323,
+        "traced_peak_mib": 125.30159664154053
+      },
+      "centroid_10s": {
+        "cold_seconds": 0.2013600999925984,
+        "median_seconds": 0.2013989999977639,
+        "max_seconds": 0.2055604999914067,
+        "playback_speed_multiple": 49.652679507400876,
+        "traced_peak_mib": 31.893108367919922
+      },
+      "variant_a_10s": {
+        "cold_seconds": 0.1590077000000747,
+        "median_seconds": 0.15659060000325553,
+        "max_seconds": 0.1596782999986317,
+        "playback_speed_multiple": 63.8607936861606,
+        "traced_peak_mib": 28.311439514160156
+      },
+      "variant_b_10s": {
+        "cold_seconds": 0.1942713000025833,
+        "median_seconds": 0.19601030000194442,
+        "max_seconds": 0.2011528000002727,
+        "playback_speed_multiple": 51.017727129139644,
+        "traced_peak_mib": 31.914031982421875
+      },
+      "zero_pitch_10s": {
+        "cold_seconds": 0.09273479999683332,
+        "median_seconds": 0.09308999999484513,
+        "max_seconds": 0.09389869999722578,
+        "playback_speed_multiple": 107.42292405794126,
+        "traced_peak_mib": 31.89139747619629
+      }
+    }
+  },
+  "current": {
+    "environment": {
+      "python": "3.13.9",
+      "numpy": "2.3.5",
+      "scipy": "1.16.3",
+      "platform": "Windows-11-10.0.26200-SP0",
+      "processor": "AMD64 Family 26 Model 68 Stepping 0, AuthenticAMD"
+    },
+    "repeats": 5,
+    "scenarios": {
+      "default_10s": {
+        "cold_seconds": 0.06413640000391752,
+        "median_seconds": 0.04533550000633113,
+        "max_seconds": 0.04624479998892639,
+        "playback_speed_multiple": 220.57769294710533,
+        "traced_peak_mib": 5.035971641540527
+      },
+      "dense_40s": {
+        "cold_seconds": 0.47637619999295566,
+        "median_seconds": 0.4552361999958521,
+        "max_seconds": 0.4565719999955036,
+        "playback_speed_multiple": 87.86647459135382,
+        "traced_peak_mib": 19.144824981689453
+      },
+      "centroid_10s": {
+        "cold_seconds": 0.07674530000076629,
+        "median_seconds": 0.06506629999785218,
+        "max_seconds": 0.06816489998891484,
+        "playback_speed_multiple": 153.68939067274604,
+        "traced_peak_mib": 4.608602523803711
+      },
+      "variant_a_10s": {
+        "cold_seconds": 0.04220280000299681,
+        "median_seconds": 0.03020480000122916,
+        "max_seconds": 0.030715499990037642,
+        "playback_speed_multiple": 331.07320689403866,
+        "traced_peak_mib": 8.295164108276367
+      },
+      "variant_b_10s": {
+        "cold_seconds": 0.07293490000301972,
+        "median_seconds": 0.059747999999672174,
+        "max_seconds": 0.06163070000184234,
+        "playback_speed_multiple": 167.36961906766533,
+        "traced_peak_mib": 4.595190048217773
+      },
+      "zero_pitch_10s": {
+        "cold_seconds": 0.029513300003600307,
+        "median_seconds": 0.025751399996806867,
+        "max_seconds": 0.02711720000661444,
+        "playback_speed_multiple": 388.3284016107856,
+        "traced_peak_mib": 5.034937858581543
+      }
+    }
+  },
+  "speedup": {
+    "default_10s": 4.872795049416196,
+    "dense_40s": 4.2293727959776035,
+    "centroid_10s": 3.095288959175672,
+    "variant_a_10s": 5.184295211253946,
+    "variant_b_10s": 3.2806169244664236,
+    "zero_pitch_10s": 3.614949090394625
+  }
+}
